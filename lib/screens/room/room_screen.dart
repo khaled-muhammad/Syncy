@@ -1,13 +1,17 @@
+import 'dart:async';
 import 'dart:io';
+import 'dart:ui';
 
 import 'package:awesome_dialog/awesome_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_blurhash/flutter_blurhash.dart';
 import 'package:get/get.dart';
+import 'package:icons_plus/icons_plus.dart';
 import 'package:syncy/controllers/home_controller.dart';
 import 'package:syncy/controllers/room_controller.dart';
 import 'package:syncy/screens/search/seach_screen.dart';
+import 'package:syncy/widgets/custom_video_player.dart';
 import 'package:video_player/video_player.dart';
 
 class RoomScreen extends StatefulWidget {
@@ -57,7 +61,12 @@ class _RoomScreenState extends State<RoomScreen> {
         // print(controller.videoController!.value.isPlaying);
       }
     });
-    controller.videoController?.initialize();
+    await controller.videoController?.initialize();
+    
+    // Trigger subtitle reload if subtitles are available
+    if (controller.currentSubtitlePath.value != null) {
+      setState(() {});
+    }
   }
 
   @override
@@ -73,7 +82,8 @@ class _RoomScreenState extends State<RoomScreen> {
         Opacity(
           opacity: 0.3,
           child: const BlurHash(
-            hash: "^2701,bB6rW-Sbj[SpW,sHa{WmjuW~W,sHj[a#fQwmWlfOo4Wma}R~f9o3jujwfPn:aya^fRa_fOSZfSn.fPfRfOssa_Wnjua^a|W*jvjvjsfRa#",
+            hash:
+                "^2701,bB6rW-Sbj[SpW,sHa{WmjuW~W,sHj[a#fQwmWlfOo4Wma}R~f9o3jujwfPn:aya^fRa_fOSZfSn.fPfRfOssa_Wnjua^a|W*jvjvjsfRa#",
           ),
         ),
         Scaffold(
@@ -88,11 +98,66 @@ class _RoomScreenState extends State<RoomScreen> {
             actions: [
               IconButton(
                 onPressed: () {
-                  Clipboard.setData(ClipboardData(text: controller.room.value.id)).then((_) {
-                    Get.snackbar('Copied', 'The room ID was copied successfully!');
+                  Clipboard.setData(
+                    ClipboardData(text: controller.room.value.id),
+                  ).then((_) {
+                    Get.snackbar(
+                      'Copied',
+                      'The room ID was copied successfully!',
+                    );
                   });
                 },
                 icon: Icon(Icons.share_rounded),
+              ),
+              IconButton(
+                onPressed: () {
+                  Get.bottomSheet(
+                    ClipRRect(
+                      child: BackdropFilter(
+                        filter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
+                        child: Container(
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            color: Colors.purple.withAlpha(100),
+                            borderRadius: BorderRadius.only(
+                              topLeft: Radius.circular(26),
+                              topRight: Radius.circular(26),
+                            ),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 12,
+                              horizontal: 6,
+                            ),
+                            child: Obx(() => ListView.builder(
+                                itemCount: controller.users.length,
+                                itemBuilder: (ctx, i) => ListTile(
+                                  title: Text(controller.users[i].name),
+                                  trailing: AnimatedContainer(
+                                    duration: const Duration(milliseconds: 250),
+                                    width: 15,
+                                    height: 15,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      gradient: LinearGradient(
+                                        colors: controller.users[i].online
+                                            ? [Colors.greenAccent, Colors.green]
+                                            : [Colors.redAccent, Colors.red],
+                                        // center: Alignment.center,
+                                        // radius: 0.8,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                },
+                icon: Icon(Iconsax.profile_2user_outline),
               ),
             ],
           ),
@@ -106,187 +171,84 @@ class _RoomScreenState extends State<RoomScreen> {
                 exitPop();
               }
             },
-            child: controller.videoController != null? AspectRatio(
-              aspectRatio: controller.videoController!.value.aspectRatio,
-              child: Stack(
-                children: [
-                  VideoPlayer(controller.videoController!),
-                  _ControlsOverlay(
-                    controller: controller.videoController!,
-                    onPlayToggle: (isPlaying) {
-                      if (isPlaying) {
-                        controller.playVideo();
-                      } else {
-                        controller.pauseVideo();
-                      }
-                    },
-                  ),
-                ],
-              ),
-            ) : Center(
-              child: Container(
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF8E2DE2), Color(0xFF4A00E0)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(30),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.purple.withValues(alpha: 0.4),
-                      blurRadius: 20,
-                      offset: const Offset(0, 10),
-                    ),
-                  ],
-                ),
-                child: ElevatedButton(
-                  onPressed: () {
-                    Get.to(() => SearchScreen(
-                      media: Get.find<HomeController>().media,
-                      onSelect: (selectedMedia) {
-                        controller.setMedia(selectedMedia);
-                        setupPlayer();
-                      },
-                    ));
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.transparent,
-                    shadowColor: Colors.transparent,
-                    padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 18),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(30),
-                    ),
-                    textStyle: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1.1,
-                    ),
-                  ),
-                  child: const Text("Choose Media", style: TextStyle(color: Colors.white),),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _ControlsOverlay extends StatelessWidget {
-  const _ControlsOverlay({required this.controller, this.onPlayToggle});
-
-  static const List<Duration> _exampleCaptionOffsets = <Duration>[
-    Duration(seconds: -10),
-    Duration(seconds: -3),
-    Duration(seconds: -1, milliseconds: -500),
-    Duration(milliseconds: -250),
-    Duration.zero,
-    Duration(milliseconds: 250),
-    Duration(seconds: 1, milliseconds: 500),
-    Duration(seconds: 3),
-    Duration(seconds: 10),
-  ];
-  static const List<double> _examplePlaybackRates = <double>[
-    0.25,
-    0.5,
-    1.0,
-    1.5,
-    2.0,
-    3.0,
-    5.0,
-    10.0,
-  ];
-
-  final VideoPlayerController controller;
-  final Function(bool isPlaying)? onPlayToggle;
-
-  @override
-  Widget build(BuildContext context) {
-    return Stack(
-      children: <Widget>[
-        AnimatedSwitcher(
-          duration: const Duration(milliseconds: 50),
-          reverseDuration: const Duration(milliseconds: 200),
-          child: controller.value.isPlaying
-              ? const SizedBox.shrink()
-              : Container(
-                  color: Colors.black26,
-                  child: const Center(
-                    child: Icon(
-                      Icons.play_arrow,
-                      color: Colors.white,
-                      size: 100.0,
-                      semanticLabel: 'Play',
-                    ),
-                  ),
-                ),
-        ),
-        GestureDetector(
-          onTap: () {
-            controller.value.isPlaying ? controller.pause() : controller.play();
-            
-            if (onPlayToggle != null) {
-              onPlayToggle!(controller.value.isPlaying);
-            }
-          },
-        ),
-        Align(
-          alignment: Alignment.topLeft,
-          child: PopupMenuButton<Duration>(
-            initialValue: controller.value.captionOffset,
-            tooltip: 'Caption Offset',
-            onSelected: (Duration delay) {
-              controller.setCaptionOffset(delay);
-            },
-            itemBuilder: (BuildContext context) {
-              return <PopupMenuItem<Duration>>[
-                for (final Duration offsetDuration in _exampleCaptionOffsets)
-                  PopupMenuItem<Duration>(
-                    value: offsetDuration,
-                    child: Text('${offsetDuration.inMilliseconds}ms'),
-                  )
-              ];
-            },
-            child: Padding(
-              padding: const EdgeInsets.symmetric(
-                // Using less vertical padding as the text is also longer
-                // horizontally, so it feels like it would need more spacing
-                // horizontally (matching the aspect ratio of the video).
-                vertical: 12,
-                horizontal: 16,
-              ),
-              child: Text('${controller.value.captionOffset.inMilliseconds}ms'),
-            ),
-          ),
-        ),
-        Align(
-          alignment: Alignment.topRight,
-          child: PopupMenuButton<double>(
-            initialValue: controller.value.playbackSpeed,
-            tooltip: 'Playback speed',
-            onSelected: (double speed) {
-              controller.setPlaybackSpeed(speed);
-            },
-            itemBuilder: (BuildContext context) {
-              return <PopupMenuItem<double>>[
-                for (final double speed in _examplePlaybackRates)
-                  PopupMenuItem<double>(
-                    value: speed,
-                    child: Text('${speed}x'),
-                  )
-              ];
-            },
-            child: Padding(
-              padding: const EdgeInsets.symmetric(
-                // Using less vertical padding as the text is also longer
-                // horizontally, so it feels like it would need more spacing
-                // horizontally (matching the aspect ratio of the video).
-                vertical: 12,
-                horizontal: 16,
-              ),
-              child: Text('${controller.value.playbackSpeed}x'),
+            child: Column(
+              children: [
+                controller.videoController != null
+                    ? AspectRatio(
+                        aspectRatio:
+                            controller.videoController!.value.aspectRatio,
+                        child: Stack(
+                          children: [
+                            VideoPlayer(controller.videoController!),
+                            ControlsOverlay(
+                              controller: controller.videoController!,
+                              onPlayToggle: (isPlaying) {
+                                if (isPlaying) {
+                                  controller.playVideo();
+                                } else {
+                                  controller.pauseVideo();
+                                }
+                              },
+                              onSeek: (position) {
+                                controller.seekVideo(position);
+                              },
+                            ),
+                          ],
+                        ),
+                      )
+                    : Center(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFF8E2DE2), Color(0xFF4A00E0)],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            borderRadius: BorderRadius.circular(30),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.purple.withValues(alpha: 0.4),
+                                blurRadius: 20,
+                                offset: const Offset(0, 10),
+                              ),
+                            ],
+                          ),
+                          child: ElevatedButton(
+                            onPressed: () {
+                              Get.to(
+                                () => SearchScreen(
+                                  media: Get.find<HomeController>().media,
+                                  onSelect: (selectedMedia) {
+                                    controller.setMedia(selectedMedia);
+                                    setupPlayer();
+                                  },
+                                ),
+                              );
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.transparent,
+                              shadowColor: Colors.transparent,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 32,
+                                vertical: 18,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(30),
+                              ),
+                              textStyle: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 1.1,
+                              ),
+                            ),
+                            child: const Text(
+                              "Choose Media",
+                              style: TextStyle(color: Colors.white),
+                            ),
+                          ),
+                        ),
+                      ),
+              ],
             ),
           ),
         ),
