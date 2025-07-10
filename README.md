@@ -86,8 +86,8 @@ flutter doctor -v  # Ensure Flutter 3.8+ is installed
 
 ```bash
 # Clone this epic project
-git clone https://github.com/yourusername/syncy.git
-cd syncy
+git clone https://github.com/khaled-muhammad/Syncy.git
+cd Syncy
 
 # Get those dependencies
 flutter pub get
@@ -272,9 +272,9 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ### Got Questions? We've Got Answers!
 
-- 📧 Email: [your-email@example.com]
-- 🐙 GitHub Issues: [Create an Issue](https://github.com/yourusername/syncy/issues)
-- 💬 Discussions: [Join the Conversation](https://github.com/yourusername/syncy/discussions)
+- 📧 Email: [khaledmuhmmed99@gmail.com]
+- 🐙 GitHub Issues: [Create an Issue](https://github.com/khaled-muhammad/Syncy/issues)
+- 💬 Discussions: [Join the Conversation](https://github.com/khaled-muhammad/Syncy/discussions)
 
 ### Show Some Love ❤️
 
