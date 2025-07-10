@@ -1,4 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET"/>
+
     <!-- Storage Permissions -->
     <!-- Legacy storage permissions for Android 9 (API level 28) and lower -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
