@@ -174,26 +174,32 @@ class _RoomScreenState extends State<RoomScreen> {
             child: Column(
               children: [
                 controller.videoController != null
-                    ? AspectRatio(
-                        aspectRatio:
-                            controller.videoController!.value.aspectRatio,
-                        child: Stack(
-                          children: [
-                            VideoPlayer(controller.videoController!),
-                            ControlsOverlay(
-                              controller: controller.videoController!,
-                              onPlayToggle: (isPlaying) {
-                                if (isPlaying) {
-                                  controller.playVideo();
-                                } else {
-                                  controller.pauseVideo();
-                                }
-                              },
-                              onSeek: (position) {
-                                controller.seekVideo(position);
-                              },
-                            ),
-                          ],
+                    ? Container(
+                        constraints: BoxConstraints(
+                          maxHeight: MediaQuery.of(context).size.height * 0.5,
+                        ),
+                        alignment: Alignment.center, // Center the video
+                        child: AspectRatio(
+                          aspectRatio:
+                              controller.videoController!.value.aspectRatio,
+                          child: Stack(
+                            children: [
+                              VideoPlayer(controller.videoController!),
+                              ControlsOverlay(
+                                controller: controller.videoController!,
+                                onPlayToggle: (isPlaying) {
+                                  if (isPlaying) {
+                                    controller.playVideo();
+                                  } else {
+                                    controller.pauseVideo();
+                                  }
+                                },
+                                onSeek: (position) {
+                                  controller.seekVideo(position);
+                                },
+                              ),
+                            ],
+                          ),
                         ),
                       )
                     : Center(
