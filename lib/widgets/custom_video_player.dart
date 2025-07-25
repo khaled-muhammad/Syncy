@@ -37,17 +37,6 @@ class ControlsOverlay extends StatefulWidget {
 }
 
 class ControlsOverlayState extends State<ControlsOverlay> {
-  static const List<Duration> _exampleCaptionOffsets = <Duration>[
-    Duration(seconds: -10),
-    Duration(seconds: -3),
-    Duration(seconds: -1, milliseconds: -500),
-    Duration(milliseconds: -250),
-    Duration.zero,
-    Duration(milliseconds: 250),
-    Duration(seconds: 1, milliseconds: 500),
-    Duration(seconds: 3),
-    Duration(seconds: 10),
-  ];
   static const List<double> _examplePlaybackRates = <double>[
     0.25,
     0.5,
@@ -447,6 +436,29 @@ sub.text.length > 50 ? 50 : sub.text.length)}...');
   Widget build(BuildContext context) {
     return Stack(
       children: <Widget>[
+        // Subtitle Display Overlay
+        if (_currentSubtitleText != null && _currentSubtitleText!.isNotEmpty)
+          Positioned(
+            bottom: 8,
+            left: 16,
+            right: 16,
+            child: Text(
+              _currentSubtitleText!,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.normal,
+                shadows: [
+                  Shadow(
+                    blurRadius: 2,
+                    color: Colors.black,
+                    offset: Offset(1, 1),
+                  ),
+                ],
+              ),
+            ),
+          ),
         AnimatedOpacity(
           opacity: _controlsVisible ? 1.0 : 0.0,
           duration: const Duration(milliseconds: 300),
@@ -495,50 +507,6 @@ sub.text.length > 50 ? 50 : sub.text.length)}...');
                               : HeroIcons.play,
                           color: Colors.white,
                           size: 50,
-                        ),
-                      ),
-                    ),
-                  ),
-                  Align(
-                    alignment: Alignment.topLeft,
-                    child: PopupMenuButton<Duration>(
-                      initialValue: widget.controller.value.captionOffset,
-                      tooltip: 'Caption Offset',
-                      onSelected: (Duration delay) {
-                        widget.controller.setCaptionOffset(delay);
-                        _resetHideTimer();
-                      },
-                      itemBuilder: (BuildContext context) {
-                        return <PopupMenuItem<Duration>>[
-                          for (final Duration offsetDuration
-                              in _exampleCaptionOffsets)
-                            PopupMenuItem<Duration>(
-                              value: offsetDuration,
-                              child: Text('${offsetDuration.inMilliseconds}ms'),
-                            ),
-                        ];
-                      },
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 12,
-                          horizontal: 16,
-                        ),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.6),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            '${widget.controller.value.captionOffset.inMilliseconds}ms',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 12,
-                            ),
-                          ),
                         ),
                       ),
                     ),
@@ -793,29 +761,6 @@ sub.text.length > 50 ? 50 : sub.text.length)}...');
             ),
           ),
         ),
-        // Subtitle Display Overlay
-        if (_currentSubtitleText != null && _currentSubtitleText!.isNotEmpty)
-          Positioned(
-            bottom: 8,
-            left: 16,
-            right: 16,
-            child: Text(
-              _currentSubtitleText!,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-                fontWeight: FontWeight.normal,
-                shadows: [
-                  Shadow(
-                    blurRadius: 2,
-                    color: Colors.black,
-                    offset: Offset(1, 1),
-                  ),
-                ],
-              ),
-            ),
-          ),
         if (!_controlsVisible)
           GestureDetector(
             onTap: () {
