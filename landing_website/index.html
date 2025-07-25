@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Syncy - Media Sync & Watch Party App</title>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600&family=Inter:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+  <div class="hero-glass">
+    <img src="https://raw.githubusercontent.com/khaled-muhammad/Syncy/main/landing_website/icon.png" alt="Syncy Logo" class="app-logo" onerror="this.style.display='none'">
+    <h1>Syncy</h1>
+    <p class="hero-tag">The Ultimate Cross-Platform Media Sync & Watch Party App</p>
+    <a href="syncy-v1.apk" class="download-btn" download>
+      <i class="fas fa-download"></i> Download for Android (.apk)
+    </a>
+    <a href="https://github.com/khaled-muhammad/Syncy" class="github-btn" target="_blank">
+      <i class="fab fa-github"></i> View on GitHub
+    </a>
+    <p style="margin-top: 1rem; font-style: italic; font-size: 1.1rem; color:#c7b5ff;">Made with 💜 by a 17-year-old dev</p>
+  </div>
+
+  <section class="section video-demo">
+    <h2><i class="fas fa-play-circle"></i> See Syncy in Action</h2>
+    <div class="video-gallery">
+      <div class="video-frame">
+        <video controls>
+          <source src="landscape.mp4" type="video/mp4">
+          Your browser does not support the video tag.
+        </video>
+        <p>Syncy: Watch Party (Portrait Mode)</p>
+      </div>
+      <div class="video-frame">
+        <video controls>
+          <source src="tutorial.mp4" type="video/mp4">
+          Your browser does not support the video tag.
+        </video>
+        <p>Syncy: Tutorial (Landscape Mode)</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <h2><i class="fas fa-star"></i> What is Syncy?</h2>
+    <p>Syncy lets you sync and watch any media file with friends in real-time across devices — your private virtual theater with AI-powered search, seamless sync, and beautiful UI.</p>
+  </section>
+
+  <section class="section">
+    <h2><i class="fas fa-magic"></i> Key Features</h2>
+    <div class="features">
+      <div class="feature">
+        <h3><i class="fas fa-fire"></i> Smart Media Discovery</h3>
+        <p>Auto-scans your device, AI-powered fuzzy search, thumbnail previews.</p>
+      </div>
+      <div class="feature">
+        <h3><i class="fas fa-rocket"></i> Real-Time Sync</h3>
+        <p>WebSocket-backed sync with sub-second latency and perfect playback.</p>
+      </div>
+      <div class="feature">
+        <h3><i class="fas fa-palette"></i> Glassmorphic UI</h3>
+        <p>Blur effects, animations, and gesture navigation built for binge-watching.</p>
+      </div>
+      <div class="feature">
+        <h3><i class="fas fa-brain"></i> Smart Search Engine</h3>
+        <p>Fuzzy matching, typo handling, and relevance ranking done right.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section tech-stack">
+    <h2><i class="fas fa-tools"></i> Tech Stack</h2>
+    <p><strong>Frontend:</strong> Flutter 3.8, GetX, Realm, Custom Animations</p>
+    <p><strong>Backend:</strong> WebSockets, Dio HTTP, File system integration</p>
+    <p><strong>Advanced:</strong> Isolates, Smart Caching, Permission Handling</p>
+  </section>
+
+  <section class="section get-started">
+    <h2><i class="fas fa-rocket"></i> Getting Started</h2>
+    <p>Clone & Run:</p>
+    <pre style="background:#1f103f; padding:1rem; border-radius:10px; color:#ddd; overflow-x:auto;">
+$ git clone https://github.com/khaled-muhammad/Syncy.git
+$ cd Syncy
+$ flutter pub get
+$ dart run realm generate
+$ flutter run
+    </pre>
+  </section>
+
+  <section class="section roadmap">
+    <h2><i class="fas fa-map"></i> Roadmap</h2>
+    <ul>
+      <li>Debounced Search & Isolated Thumbnails</li>
+      <li>iOS Support</li>
+      <li>Group Chat & Screen Sharing</li>
+      <li>Smart Recommendations & Playlist Builder</li>
+      <li>VR Watch Party Mode (future)</li>
+    </ul>
+  </section>
+
+  <section class="section contribute">
+    <h2><i class="fas fa-handshake"></i> Contribute</h2>
+    <p>Open source & youth-powered — fork it, build features, make magic!</p>
+    <p>
+      Follow the steps:
+      <br>1. Fork the repo
+      <br>2. Create a branch
+      <br>3. Add magic ✨
+      <br>4. Submit a Pull Request
+    </p>
+  </section>
+
+  <section class="section contact">
+    <h2><i class="fas fa-envelope"></i> Contact & Support</h2>
+    <p>Email: <a href="mailto:khaledmuhmmed99@gmail.com">khaledmuhmmed99@gmail.com</a></p>
+    <p>GitHub: <a href="https://github.com/khaled-muhammad/Syncy" target="_blank">Syncy on GitHub</a></p>
+  </section>
+
+  <footer>
+    <p>Made with 💜 and ☕ by Khaled Muhammad</p>
+    <p>"Code is poetry, and every app tells a story." ⭐</p>
+  </footer>
+</body>
+
+</html>
