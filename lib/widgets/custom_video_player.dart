@@ -818,6 +818,8 @@ class _FullScreenVideoPage extends StatefulWidget {
 }
 
 class _FullScreenVideoPageState extends State<_FullScreenVideoPage> {
+  late VoidCallback _videoListener;
+
   @override
   void initState() {
     super.initState();
@@ -839,10 +841,18 @@ class _FullScreenVideoPageState extends State<_FullScreenVideoPage> {
         DeviceOrientation.landscapeRight,
       ]);
     }
+
+    // Add listener to update state on controller changes
+    _videoListener = () {
+      if (mounted) setState(() {});
+    };
+    widget.controller.addListener(_videoListener);
   }
 
   @override
   void dispose() {
+    // Remove the listener
+    widget.controller.removeListener(_videoListener);
     // Restore system UI and orientation
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
