@@ -353,15 +353,18 @@ sub.text.length > 50 ? 50 : sub.text.length)}...');
     setState(() {});
   }
 
-  void _enterFullScreen() {
-    final isLandscape =
-        MediaQuery.of(context).orientation == Orientation.landscape;
-
-    if (isLandscape) {
-      Get.back();
+  void _toggleFullScreen() {
+    // Check if we're already in fullscreen by looking at the current route
+    final isInFullScreen = ModalRoute.of(context)?.settings.name == '_FullScreenVideoPage';
+    
+    if (isInFullScreen) {
+      // If already in fullscreen, pop to exit
+      Navigator.of(context).pop();
     } else {
+      // If not in fullscreen, push to enter fullscreen
       Navigator.of(context).push(
         MaterialPageRoute(
+          settings: RouteSettings(name: '_FullScreenVideoPage'),
           builder: (context) => _FullScreenVideoPage(
             controller: widget.controller,
             onPlayToggle: widget.onPlayToggle,
@@ -592,7 +595,7 @@ sub.text.length > 50 ? 50 : sub.text.length)}...');
                         IconButton(
                           icon: Icon(Icons.fullscreen, color: Colors.white),
                           onPressed: () {
-                            _enterFullScreen();
+                            _toggleFullScreen();
                             _resetHideTimer();
                           },
                         ),
@@ -818,12 +821,24 @@ class _FullScreenVideoPageState extends State<_FullScreenVideoPage> {
   @override
   void initState() {
     super.initState();
-    // Hide system UI and lock landscape
+    // Hide system UI and set orientation based on video aspect ratio
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-    SystemChrome.setPreferredOrientations([
-      DeviceOrientation.landscapeLeft,
-      DeviceOrientation.landscapeRight,
-    ]);
+    
+    // Check if video is portrait or landscape
+    final isPortraitVideo = widget.controller.value.aspectRatio < 1.0;
+    
+    if (isPortraitVideo) {
+      // For portrait videos, use portrait orientation
+      SystemChrome.setPreferredOrientations([
+        DeviceOrientation.portraitUp,
+      ]);
+    } else {
+      // For landscape videos, use landscape orientation
+      SystemChrome.setPreferredOrientations([
+        DeviceOrientation.landscapeLeft,
+        DeviceOrientation.landscapeRight,
+      ]);
+    }
   }
 
   @override
@@ -836,22 +851,47 @@ class _FullScreenVideoPageState extends State<_FullScreenVideoPage> {
 
   @override
   Widget build(BuildContext context) {
+    final isPortraitVideo = widget.controller.value.aspectRatio < 1.0;
+    final screenSize = MediaQuery.of(context).size;
+    
     return Scaffold(
       backgroundColor: Colors.black,
       body: Center(
-        child: AspectRatio(
-          aspectRatio: widget.controller.value.aspectRatio,
-          child: Stack(
-            children: [
-              VideoPlayer(widget.controller),
-              ControlsOverlay(
-                controller: widget.controller,
-                onPlayToggle: widget.onPlayToggle,
-                onSeek: widget.onSeek,
+        child: isPortraitVideo
+            ? Container(
+                width: screenSize.width,
+                height: screenSize.height,
+                child: FittedBox(
+                  fit: BoxFit.contain,
+                  child: SizedBox(
+                    width: screenSize.width,
+                    height: screenSize.width / widget.controller.value.aspectRatio,
+                    child: Stack(
+                      children: [
+                        VideoPlayer(widget.controller),
+                        ControlsOverlay(
+                          controller: widget.controller,
+                          onPlayToggle: widget.onPlayToggle,
+                          onSeek: widget.onSeek,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              )
+            : AspectRatio(
+                aspectRatio: widget.controller.value.aspectRatio,
+                child: Stack(
+                  children: [
+                    VideoPlayer(widget.controller),
+                    ControlsOverlay(
+                      controller: widget.controller,
+                      onPlayToggle: widget.onPlayToggle,
+                      onSeek: widget.onSeek,
+                    ),
+                  ],
+                ),
               ),
-            ],
-          ),
-        ),
       ),
     );
   }
