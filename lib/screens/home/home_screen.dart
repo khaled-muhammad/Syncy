@@ -110,6 +110,9 @@ class HomeScreen extends GetView<HomeController> {
 
   Widget _buildAudioPage() {
     return SafeArea(
+      child: Center(child: Text("Currently: Under development"),),
+    );
+    return SafeArea(
       child: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
