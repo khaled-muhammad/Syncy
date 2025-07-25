@@ -489,28 +489,6 @@ sub.text.length > 50 ? 50 : sub.text.length)}...');
               },
               child: Stack(
                 children: [
-                  Center(
-                    child: GestureDetector(
-                      onTap: () {
-                        _togglePlayPause();
-                        _resetHideTimer();
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.6),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          widget.controller.value.isPlaying
-                              ? HeroIcons.pause
-                              : HeroIcons.play,
-                          color: Colors.white,
-                          size: 50,
-                        ),
-                      ),
-                    ),
-                  ),
                   /*Align(
                     alignment: Alignment.topRight,
                     child: PopupMenuButton<double>(
@@ -621,139 +599,170 @@ sub.text.length > 50 ? 50 : sub.text.length)}...');
                       ],
                     ),
                   ),
-                  Align(
-                    alignment: Alignment.bottomCenter,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16.0,
-                        vertical: 0,
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.only(
-                          topLeft: Radius.circular(16),
-                          topRight: Radius.circular(16),
-                        ),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            //horizontal: 16.0,
-                            // vertical: 6.0,
+                  Positioned.fill(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        Expanded(
+                          child: Center(
+                            child: Padding(
+                              padding: const EdgeInsets.only(top:16),
+                              child: GestureDetector(
+                                onTap: () {
+                                  _togglePlayPause();
+                                  _resetHideTimer();
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.all(16),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withValues(alpha: 0.6),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Icon(
+                                    widget.controller.value.isPlaying
+                                        ? HeroIcons.pause
+                                        : HeroIcons.play,
+                                    color: Colors.white,
+                                    size: 50,
+                                  ),
+                                ),
+                              ),
+                            ),
                           ),
-                          decoration: BoxDecoration(
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16.0,
+                            vertical: 0,
+                          ),
+                          child: ClipRRect(
                             borderRadius: BorderRadius.only(
                               topLeft: Radius.circular(16),
                               topRight: Radius.circular(16),
                             ),
-                            color: Colors.black.withValues(alpha: 0.7),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.3),
-                                blurRadius: 10,
-                                offset: const Offset(0, 4),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                //horizontal: 16.0,
+                                // vertical: 6.0,
                               ),
-                            ],
-                          ),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Container(
-                                padding: EdgeInsets.symmetric(
-                                  vertical: 2,
-                                  horizontal: 6,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.only(
+                                  topLeft: Radius.circular(16),
+                                  topRight: Radius.circular(16),
                                 ),
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    colors: [
-                                      Colors.purple,
-                                      Colors.deepPurpleAccent,
-                                    ],
+                                color: Colors.black.withValues(alpha: 0.7),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.3),
+                                    blurRadius: 10,
+                                    offset: const Offset(0, 4),
                                   ),
-                                  borderRadius: BorderRadius.only(
-                                    bottomRight: Radius.circular(16),
-                                  ),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text(
-                                      _formatDuration(
-                                        widget.controller.value.position,
+                                ],
+                              ),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Container(
+                                    padding: EdgeInsets.symmetric(
+                                      vertical: 2,
+                                      horizontal: 6,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      gradient: LinearGradient(
+                                        colors: [
+                                          Colors.purple,
+                                          Colors.deepPurpleAccent,
+                                        ],
                                       ),
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w500,
+                                      borderRadius: BorderRadius.only(
+                                        bottomRight: Radius.circular(16),
                                       ),
                                     ),
-                                    Text(" / "),
-                                    Text(
-                                      _formatDuration(
-                                        widget.controller.value.duration,
-                                      ),
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w500,
-                                      ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          _formatDuration(
+                                            widget.controller.value.position,
+                                          ),
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                        Text(" / "),
+                                        Text(
+                                          _formatDuration(
+                                            widget.controller.value.duration,
+                                          ),
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              SliderTheme(
-                                data: SliderTheme.of(context).copyWith(
-                                  activeTrackColor: Colors.deepPurpleAccent,
-                                  inactiveTrackColor: Colors.deepPurpleAccent
-                                      .withValues(alpha: 0.3),
-                                  thumbColor: Colors.white,
-                                  overlayColor: Colors.deepPurpleAccent
-                                      .withValues(alpha: 0.2),
-                                  thumbShape: const RoundSliderThumbShape(
-                                    enabledThumbRadius: 8,
                                   ),
-                                  overlayShape: const RoundSliderOverlayShape(
-                                    overlayRadius: 16,
+                                  const SizedBox(height: 4),
+                                  SliderTheme(
+                                    data: SliderTheme.of(context).copyWith(
+                                      activeTrackColor: Colors.deepPurpleAccent,
+                                      inactiveTrackColor: Colors.deepPurpleAccent
+                                          .withValues(alpha: 0.3),
+                                      thumbColor: Colors.white,
+                                      overlayColor: Colors.deepPurpleAccent
+                                          .withValues(alpha: 0.2),
+                                      thumbShape: const RoundSliderThumbShape(
+                                        enabledThumbRadius: 8,
+                                      ),
+                                      overlayShape: const RoundSliderOverlayShape(
+                                        overlayRadius: 16,
+                                      ),
+                                      trackHeight: 6,
+                                    ),
+                                    child: Slider(
+                                      value:
+                                          widget
+                                                  .controller
+                                                  .value
+                                                  .duration
+                                                  .inMilliseconds >
+                                              0
+                                          ? widget
+                                                .controller
+                                                .value
+                                                .position
+                                                .inMilliseconds
+                                                .toDouble()
+                                          : 0.0,
+                                      min: 0.0,
+                                      max: widget
+                                          .controller
+                                          .value
+                                          .duration
+                                          .inMilliseconds
+                                          .toDouble(),
+                                      onChanged: (value) {
+                                        final newPosition = Duration(
+                                          milliseconds: value.toInt(),
+                                        );
+                                        widget.controller.seekTo(newPosition);
+                                        if (widget.onSeek != null) {
+                                          widget.onSeek!(newPosition);
+                                        }
+                                        _resetHideTimer();
+                                      },
+                                    ),
                                   ),
-                                  trackHeight: 6,
-                                ),
-                                child: Slider(
-                                  value:
-                                      widget
-                                              .controller
-                                              .value
-                                              .duration
-                                              .inMilliseconds >
-                                          0
-                                      ? widget
-                                            .controller
-                                            .value
-                                            .position
-                                            .inMilliseconds
-                                            .toDouble()
-                                      : 0.0,
-                                  min: 0.0,
-                                  max: widget
-                                      .controller
-                                      .value
-                                      .duration
-                                      .inMilliseconds
-                                      .toDouble(),
-                                  onChanged: (value) {
-                                    final newPosition = Duration(
-                                      milliseconds: value.toInt(),
-                                    );
-                                    widget.controller.seekTo(newPosition);
-                                    if (widget.onSeek != null) {
-                                      widget.onSeek!(newPosition);
-                                    }
-                                    _resetHideTimer();
-                                  },
-                                ),
+                                ],
                               ),
-                            ],
+                            ),
                           ),
                         ),
-                      ),
+                      ],
                     ),
                   ),
                 ],
