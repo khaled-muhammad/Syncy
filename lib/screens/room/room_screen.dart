@@ -13,6 +13,7 @@ import 'package:syncy/controllers/room_controller.dart';
 import 'package:syncy/screens/search/seach_screen.dart';
 import 'package:syncy/widgets/custom_video_player.dart';
 import 'package:video_player/video_player.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 class RoomScreen extends StatefulWidget {
   const RoomScreen({super.key});
@@ -27,6 +28,9 @@ class _RoomScreenState extends State<RoomScreen> {
   @override
   void initState() {
     super.initState();
+
+    // Enable wake lock to prevent screen from turning off
+    WakelockPlus.enable();
 
     if (controller.room.value.currentVideoUrl != null) {
       setupPlayer();
@@ -62,7 +66,7 @@ class _RoomScreenState extends State<RoomScreen> {
       }
     });
     await controller.videoController?.initialize();
-    
+
     // Trigger subtitle reload if subtitles are available
     if (controller.currentSubtitlePath.value != null) {
       setState(() {});
@@ -71,6 +75,9 @@ class _RoomScreenState extends State<RoomScreen> {
 
   @override
   void dispose() {
+    // Disable wake lock when leaving the room
+    WakelockPlus.disable();
+
     controller.videoController?.dispose();
     super.dispose();
   }
@@ -129,7 +136,8 @@ class _RoomScreenState extends State<RoomScreen> {
                               vertical: 12,
                               horizontal: 6,
                             ),
-                            child: Obx(() => ListView.builder(
+                            child: Obx(
+                              () => ListView.builder(
                                 itemCount: controller.users.length,
                                 itemBuilder: (ctx, i) => ListTile(
                                   title: Text(controller.users[i].name),

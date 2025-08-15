@@ -7,6 +7,7 @@ import 'package:get/get.dart';
 import 'package:icons_plus/icons_plus.dart';
 import 'package:video_player/video_player.dart';
 import 'package:syncy/controllers/room_controller.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 // Add subtitle model
 class SubtitleItem {
@@ -14,15 +15,12 @@ class SubtitleItem {
   final Duration end;
   final String text;
 
-  SubtitleItem({
-    required this.start,
-    required this.end,
-    required this.text,
-  });
+  SubtitleItem({required this.start, required this.end, required this.text});
 }
 
 class ControlsOverlay extends StatefulWidget {
-  const ControlsOverlay({super.key, 
+  const ControlsOverlay({
+    super.key,
     required this.controller,
     this.onPlayToggle,
     this.onSeek,
@@ -58,7 +56,7 @@ class ControlsOverlayState extends State<ControlsOverlay> {
     super.initState();
     _loadSubtitles();
     widget.controller.addListener(_updateSubtitles);
-    
+
     // Register for subtitle change notifications
     final RoomController roomController = Get.find<RoomController>();
     roomController.onSubtitleChanged = () {
@@ -69,7 +67,9 @@ class ControlsOverlayState extends State<ControlsOverlay> {
   void _loadSubtitles() {
     final RoomController roomController = Get.find<RoomController>();
     if (roomController.currentSubtitlePath.value != null) {
-      print('Loading subtitles from: ${roomController.currentSubtitlePath.value}');
+      print(
+        'Loading subtitles from: ${roomController.currentSubtitlePath.value}',
+      );
       _parseSubtitleFile(roomController.currentSubtitlePath.value!);
     } else {
       print('Clearing subtitles');
@@ -92,22 +92,23 @@ class ControlsOverlayState extends State<ControlsOverlay> {
       final extension = filePath.split('.').last.toLowerCase();
 
       print('Parsing subtitle file with extension: $extension');
-      
+
       if (extension == 'srt') {
         _subtitles = _parseSRT(content);
       } else if (extension == 'vtt') {
         _subtitles = _parseVTT(content);
       }
-      
+
       print('Parsed ${_subtitles.length} subtitle entries');
-      
+
       // Debug: Print first few subtitles
       for (int i = 0; i < _subtitles.length && i < 3; i++) {
         final sub = _subtitles[i];
-        print('Subtitle $i: ${sub.start} -> ${sub.end}: ${sub.text.substring(0, 
-sub.text.length > 50 ? 50 : sub.text.length)}...');
+        print(
+          'Subtitle $i: ${sub.start} -> ${sub.end}: ${sub.text.substring(0, sub.text.length > 50 ? 50 : sub.text.length)}...',
+        );
       }
-      
+
       setState(() {});
     } catch (e) {
       print('Error parsing subtitle file: $e');
@@ -117,19 +118,21 @@ sub.text.length > 50 ? 50 : sub.text.length)}...');
   List<SubtitleItem> _parseSRT(String content) {
     final List<SubtitleItem> subtitles = [];
     final lines = content.split('\n');
-    
+
     for (int i = 0; i < lines.length; i++) {
       final line = lines[i].trim();
-      
+
       // Check if this line is a subtitle number (sequence)
       if (RegExp(r'^\d+$').hasMatch(line)) {
         // Look for the timestamp on the next line
         if (i + 1 < lines.length) {
           final timeLine = lines[i + 1].trim();
-          
+
           // Check if the next line contains timing information
-          final timeMatch = RegExp(r'(\d{2}):(\d{2}):(\d{2})[,\.](\d{3}) --> (\d{2}):(\d{2}):(\d{2})[,\.](\d{3})').firstMatch(timeLine);
-          
+          final timeMatch = RegExp(
+            r'(\d{2}):(\d{2}):(\d{2})[,\.](\d{3}) --> (\d{2}):(\d{2}):(\d{2})[,\.](\d{3})',
+          ).firstMatch(timeLine);
+
           if (timeMatch != null) {
             final start = Duration(
               hours: int.parse(timeMatch.group(1)!),
@@ -137,83 +140,81 @@ sub.text.length > 50 ? 50 : sub.text.length)}...');
               seconds: int.parse(timeMatch.group(3)!),
               milliseconds: int.parse(timeMatch.group(4)!),
             );
-            
+
             final end = Duration(
               hours: int.parse(timeMatch.group(5)!),
               minutes: int.parse(timeMatch.group(6)!),
               seconds: int.parse(timeMatch.group(7)!),
               milliseconds: int.parse(timeMatch.group(8)!),
             );
-            
+
             // Collect subtitle text lines
             final List<String> textLines = [];
             int textIndex = i + 2;
-            
+
             // Read text lines until we hit an empty line or another subtitle number
             while (textIndex < lines.length) {
               final textLine = lines[textIndex].trim();
-              
+
               // Stop if we hit an empty line or another subtitle number
               if (textLine.isEmpty || RegExp(r'^\d+$').hasMatch(textLine)) {
                 break;
               }
-              
+
               textLines.add(textLine);
               textIndex++;
             }
-            
+
             if (textLines.isNotEmpty) {
               // Join all text lines and strip formatting tags
               final text = _stripFormattingTags(textLines.join('\n'));
-              
-              subtitles.add(SubtitleItem(
-                start: start,
-                end: end,
-                text: text,
-              ));
+
+              subtitles.add(SubtitleItem(start: start, end: end, text: text));
             }
-            
+
             // Skip to the end of this subtitle block
             i = textIndex - 1;
           }
         }
       }
     }
-    
+
     return subtitles;
   }
-  
+
   String _stripFormattingTags(String text) {
     // Remove common SRT formatting tags
     String result = text;
-    
+
     // Remove color tags like {\\c&HFFFFFF&}
     result = result.replaceAll(RegExp(r'\{\\[^}]*\}'), '');
-    
+
     // Remove HTML-like tags like <i> or <b>
     result = result.replaceAll(RegExp(r'<[^>]*>'), '');
-    
+
     // Remove other formatting like {\an8}
     result = result.replaceAll(RegExp(r'\{[^}]*\}'), '');
-    
+
     // Clean up extra whitespace
     result = result.trim();
-    
+
     // If after stripping formatting we have empty text, return the original
     if (result.isEmpty && text.isNotEmpty) {
-      print('Warning: Text became empty after formatting removal. Original: $text');
+      print(
+        'Warning: Text became empty after formatting removal. Original: $text',
+      );
       // Try a more conservative approach - just remove known problematic tags
       result = text.replaceAll(RegExp(r'\{\\[cf]&[^}]*\}'), '');
       result = result.replaceAll(RegExp(r'\{\\[fb][^}]*\}'), '');
       result = result.trim();
     }
-    
+
     return result;
   }
 
   List<SubtitleItem> _parseVTT(String content) {
     final List<SubtitleItem> subtitles = [];
-    
+
     // Skip WebVTT header if present
     if (content.trim().startsWith('WEBVTT')) {
       final headerEnd = content.indexOf('\n\n');
@@ -221,7 +222,7 @@ sub.text.length > 50 ? 50 : sub.text.length)}...');
         content = content.substring(headerEnd + 2);
       }
     }
-    
+
     final blocks = content.split('\n\n');
 
     for (final block in blocks) {
@@ -235,15 +236,17 @@ sub.text.length > 50 ? 50 : sub.text.length)}...');
             break;
           }
         }
-        
+
         if (timeLineIndex == -1) continue; // Skip if no timing found
-        
+
         final timeLine = lines[timeLineIndex];
         final textLines = lines.sublist(timeLineIndex + 1);
-        
+
         // More flexible regex pattern for timestamps
-        final timeMatch = RegExp(r'(\d{2}):(\d{2}):(\d{2})[\.,](\d{3}) --> (\d{2}):(\d{2}):(\d{2})[\.,](\d{3})').firstMatch(timeLine);
-        
+        final timeMatch = RegExp(
+          r'(\d{2}):(\d{2}):(\d{2})[\.,](\d{3}) --> (\d{2}):(\d{2}):(\d{2})[\.,](\d{3})',
+        ).firstMatch(timeLine);
+
         if (timeMatch != null) {
           final start = Duration(
             hours: int.parse(timeMatch.group(1)!),
@@ -251,26 +254,22 @@ sub.text.length > 50 ? 50 : sub.text.length)}...');
             seconds: int.parse(timeMatch.group(3)!),
             milliseconds: int.parse(timeMatch.group(4)!),
           );
-          
+
           final end = Duration(
             hours: int.parse(timeMatch.group(5)!),
             minutes: int.parse(timeMatch.group(6)!),
             seconds: int.parse(timeMatch.group(7)!),
             milliseconds: int.parse(timeMatch.group(8)!),
           );
-          
+
           // Join all lines and strip basic formatting tags
           final text = _stripFormattingTags(textLines.join('\n'));
-          
-          subtitles.add(SubtitleItem(
-            start: start,
-            end: end,
-            text: text,
-          ));
+
+          subtitles.add(SubtitleItem(start: start, end: end, text: text));
         }
       }
     }
-    
+
     return subtitles;
   }
 
@@ -278,22 +277,25 @@ sub.text.length > 50 ? 50 : sub.text.length)}...');
     if (_subtitles.isEmpty) return;
 
     final position = widget.controller.value.position;
-    
+
     // Apply subtitle delay from room controller
     final RoomController roomController = Get.find<RoomController>();
     final delayMs = roomController.subtitleDelay.value;
     final adjustedPosition = Duration(
       milliseconds: position.inMilliseconds + delayMs,
     );
-    
+
     String? newSubtitleText;
 
     for (final subtitle in _subtitles) {
-      if (adjustedPosition >= subtitle.start && adjustedPosition <= subtitle.end) {
+      if (adjustedPosition >= subtitle.start &&
+          adjustedPosition <= subtitle.end) {
         newSubtitleText = subtitle.text;
         // Debug: Print when we find a matching subtitle
         if (newSubtitleText != _currentSubtitleText) {
-          print('Displaying subtitle at ${position.inSeconds}s (adjusted: ${adjustedPosition.inSeconds}s): ${newSubtitleText.substring(0, newSubtitleText.length > 50 ? 50 : newSubtitleText.length)}...');
+          print(
+            'Displaying subtitle at ${position.inSeconds}s (adjusted: ${adjustedPosition.inSeconds}s): ${newSubtitleText.substring(0, newSubtitleText.length > 50 ? 50 : newSubtitleText.length)}...',
+          );
         }
         break;
       }
@@ -310,11 +312,11 @@ sub.text.length > 50 ? 50 : sub.text.length)}...');
   void dispose() {
     _hideTimer?.cancel();
     widget.controller.removeListener(_updateSubtitles);
-    
+
     // Clean up subtitle change callback
     final RoomController roomController = Get.find<RoomController>();
     roomController.onSubtitleChanged = null;
-    
+
     super.dispose();
   }
 
@@ -348,15 +350,16 @@ sub.text.length > 50 ? 50 : sub.text.length)}...');
       widget.controller.pause();
     }
     widget.onPlayToggle?.call(newIsPlaying);
-    
+
     // Force immediate UI update
     setState(() {});
   }
 
   void _toggleFullScreen() {
     // Check if we're already in fullscreen by looking at the current route
-    final isInFullScreen = ModalRoute.of(context)?.settings.name == '_FullScreenVideoPage';
-    
+    final isInFullScreen =
+        ModalRoute.of(context)?.settings.name == '_FullScreenVideoPage';
+
     if (isInFullScreen) {
       // If already in fullscreen, pop to exit
       Navigator.of(context).pop();
@@ -378,7 +381,7 @@ sub.text.length > 50 ? 50 : sub.text.length)}...');
   void _showSubtitleDelayDialog(BuildContext context) {
     final RoomController roomController = Get.find<RoomController>();
     final currentDelay = roomController.subtitleDelay.value;
-    
+
     showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -394,14 +397,26 @@ sub.text.length > 50 ? 50 : sub.text.length)}...');
               Wrap(
                 spacing: 8,
                 children: [
-                  for (int delay in [-2000, -1000, -500, -250, 0, 250, 500, 1000, 2000])
+                  for (int delay in [
+                    -2000,
+                    -1000,
+                    -500,
+                    -250,
+                    0,
+                    250,
+                    500,
+                    1000,
+                    2000,
+                  ])
                     ElevatedButton(
                       onPressed: () {
                         roomController.setSubtitleDelay(delay);
                         Navigator.of(context).pop();
                       },
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: delay == currentDelay ? Colors.purple : null,
+                        backgroundColor: delay == currentDelay
+                            ? Colors.purple
+                            : null,
                       ),
                       child: Text('${delay}ms'),
                     ),
@@ -544,7 +559,8 @@ sub.text.length > 50 ? 50 : sub.text.length)}...');
                           icon: Icon(Icons.subtitles, color: Colors.white),
                           tooltip: 'Subtitle Options',
                           onSelected: (String value) {
-                            final RoomController roomController = Get.find<RoomController>();
+                            final RoomController roomController =
+                                Get.find<RoomController>();
                             if (value == 'select') {
                               roomController.selectSubtitleFile();
                             } else if (value == 'clear') {
@@ -555,7 +571,8 @@ sub.text.length > 50 ? 50 : sub.text.length)}...');
                             _resetHideTimer();
                           },
                           itemBuilder: (BuildContext context) {
-                            final RoomController roomController = Get.find<RoomController>();
+                            final RoomController roomController =
+                                Get.find<RoomController>();
                             return [
                               PopupMenuItem<String>(
                                 value: 'select',
@@ -567,14 +584,17 @@ sub.text.length > 50 ? 50 : sub.text.length)}...');
                                   ],
                                 ),
                               ),
-                              if (roomController.currentSubtitlePath.value != null) ...[
+                              if (roomController.currentSubtitlePath.value !=
+                                  null) ...[
                                 PopupMenuItem<String>(
                                   value: 'delay',
                                   child: Row(
                                     children: [
                                       Icon(Icons.schedule, size: 16),
                                       SizedBox(width: 8),
-                                      Text('Adjust Delay (${roomController.subtitleDelay.value}ms)'),
+                                      Text(
+                                        'Adjust Delay (${roomController.subtitleDelay.value}ms)',
+                                      ),
                                     ],
                                   ),
                                 ),
@@ -609,7 +629,7 @@ sub.text.length > 50 ? 50 : sub.text.length)}...');
                         Expanded(
                           child: Center(
                             child: Padding(
-                              padding: const EdgeInsets.only(top:16),
+                              padding: const EdgeInsets.only(top: 16),
                               child: GestureDetector(
                                 onTap: () {
                                   _togglePlayPause();
@@ -713,7 +733,8 @@ sub.text.length > 50 ? 50 : sub.text.length)}...');
                                   SliderTheme(
                                     data: SliderTheme.of(context).copyWith(
                                       activeTrackColor: Colors.deepPurpleAccent,
-                                      inactiveTrackColor: Colors.deepPurpleAccent
+                                      inactiveTrackColor: Colors
+                                          .deepPurpleAccent
                                           .withValues(alpha: 0.3),
                                       thumbColor: Colors.white,
                                       overlayColor: Colors.deepPurpleAccent
@@ -721,9 +742,10 @@ sub.text.length > 50 ? 50 : sub.text.length)}...');
                                       thumbShape: const RoundSliderThumbShape(
                                         enabledThumbRadius: 8,
                                       ),
-                                      overlayShape: const RoundSliderOverlayShape(
-                                        overlayRadius: 16,
-                                      ),
+                                      overlayShape:
+                                          const RoundSliderOverlayShape(
+                                            overlayRadius: 16,
+                                          ),
                                       trackHeight: 6,
                                     ),
                                     child: Slider(
@@ -825,15 +847,16 @@ class _FullScreenVideoPageState extends State<_FullScreenVideoPage> {
     super.initState();
     // Hide system UI and set orientation based on video aspect ratio
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-    
+
+    // Enable wake lock for fullscreen video
+    WakelockPlus.enable();
+
     // Check if video is portrait or landscape
     final isPortraitVideo = widget.controller.value.aspectRatio < 1.0;
-    
+
     if (isPortraitVideo) {
       // For portrait videos, use portrait orientation
-      SystemChrome.setPreferredOrientations([
-        DeviceOrientation.portraitUp,
-      ]);
+      SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
     } else {
       // For landscape videos, use landscape orientation
       SystemChrome.setPreferredOrientations([
@@ -856,6 +879,10 @@ class _FullScreenVideoPageState extends State<_FullScreenVideoPage> {
     // Restore system UI and orientation
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+    
+    // Disable wake lock when exiting fullscreen
+    WakelockPlus.disable();
+    
     super.dispose();
   }
 
@@ -863,7 +890,7 @@ class _FullScreenVideoPageState extends State<_FullScreenVideoPage> {
   Widget build(BuildContext context) {
     final isPortraitVideo = widget.controller.value.aspectRatio < 1.0;
     final screenSize = MediaQuery.of(context).size;
-    
+
     return Scaffold(
       backgroundColor: Colors.black,
       body: Center(
@@ -875,7 +902,8 @@ class _FullScreenVideoPageState extends State<_FullScreenVideoPage> {
                   fit: BoxFit.contain,
                   child: SizedBox(
                     width: screenSize.width,
-                    height: screenSize.width / widget.controller.value.aspectRatio,
+                    height:
+                        screenSize.width / widget.controller.value.aspectRatio,
                     child: Stack(
                       children: [
                         VideoPlayer(widget.controller),
