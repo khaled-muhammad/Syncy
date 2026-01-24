@@ -62,6 +62,10 @@ class SyncPlayConsumer(AsyncWebsocketConsumer):
                 await self.handle_video_change(data)
             elif message_type == 'heartbeat':
                 await self.handle_heartbeat(data)
+            elif message_type == 'chat':
+                await self.handle_chat(data)
+            elif message_type == 'reaction':
+                await self.handle_reaction(data)
             else:
                 logger.error(f"❌ Unknown message type: {message_type}")
                 await self.send_error(f"Unknown message type: {message_type}")
@@ -248,6 +252,60 @@ class SyncPlayConsumer(AsyncWebsocketConsumer):
             'data': {'timestamp': timezone.now().timestamp()}
         }))
 
+    async def handle_chat(self, data):
+        """Handle chat messages from users"""
+        message_text = data.get('data', {}).get('message', '')
+        user_name = data.get('data', {}).get('userName', 'Unknown')
+        
+        if not message_text:
+            return
+        
+        # Store message
+        await self.store_message('chat', {
+            'message': message_text,
+            'userName': user_name
+        })
+        
+        # Broadcast to all users in room
+        await self.channel_layer.group_send(
+            self.room_group_name,
+            {
+                'type': 'chat_message',
+                'message': message_text,
+                'user_id': self.user_id,
+                'user_name': user_name,
+                'timestamp': timezone.now().isoformat()
+            }
+        )
+        logger.info(f"💬 Chat message from {user_name}: {message_text}")
+
+    async def handle_reaction(self, data):
+        """Handle emoji reactions from users"""
+        emoji = data.get('data', {}).get('emoji', '')
+        user_name = data.get('data', {}).get('userName', 'Unknown')
+        
+        if not emoji:
+            return
+        
+        # Store message
+        await self.store_message('reaction', {
+            'emoji': emoji,
+            'userName': user_name
+        })
+        
+        # Broadcast to all users in room
+        await self.channel_layer.group_send(
+            self.room_group_name,
+            {
+                'type': 'reaction_event',
+                'emoji': emoji,
+                'user_id': self.user_id,
+                'user_name': user_name,
+                'timestamp': timezone.now().isoformat()
+            }
+        )
+        logger.info(f"🎉 Reaction from {user_name}: {emoji}")
+
     async def handle_user_leave(self):
         if self.user:
             # Remove user from room
@@ -262,6 +320,7 @@ class SyncPlayConsumer(AsyncWebsocketConsumer):
                 {
                     'type': 'user_left',
                     'user_id': self.user_id,
+                    'user_name': self.user.name if self.user else 'Unknown',
                     'room': await self.room_to_dict(self.room)
                 }
             )
@@ -276,7 +335,11 @@ class SyncPlayConsumer(AsyncWebsocketConsumer):
     async def user_left(self, event):
         await self.send(text_data=json.dumps({
             'type': 'user_left',
-            'data': {'user_id': event['user_id']}
+            'data': {
+                'id': event['user_id'],
+                'user_id': event['user_id'],
+                'name': event.get('user_name', 'Unknown')
+            }
         }))
 
     async def video_play(self, event):
@@ -319,6 +382,30 @@ class SyncPlayConsumer(AsyncWebsocketConsumer):
                     'videoTitle': event['video_title']
                 }
             }))
+
+    async def chat_message(self, event):
+        """Send chat message to all users including sender"""
+        await self.send(text_data=json.dumps({
+            'type': 'chat',
+            'data': {
+                'message': event['message'],
+                'userId': event['user_id'],
+                'userName': event['user_name'],
+                'timestamp': event['timestamp']
+            }
+        }))
+
+    async def reaction_event(self, event):
+        """Send reaction to all users including sender"""
+        await self.send(text_data=json.dumps({
+            'type': 'reaction',
+            'data': {
+                'emoji': event['emoji'],
+                'userId': event['user_id'],
+                'userName': event['user_name'],
+                'timestamp': event['timestamp']
+            }
+        }))
 
     # Helper methods
     async def send_error(self, message):

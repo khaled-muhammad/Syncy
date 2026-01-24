@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:icons_plus/icons_plus.dart';
 import 'package:syncy/controllers/settings_controller.dart';
+import 'package:syncy/routes/app_routes.dart';
 
 class SettingsScreen extends GetView<SettingsController> {
   const SettingsScreen({Key? key}) : super(key: key);
@@ -44,6 +46,45 @@ class SettingsScreen extends GetView<SettingsController> {
               title: const Text('Sync Frequency'),
               subtitle: Obx(() => Text(controller.syncFrequency.value)),
               onTap: controller.changeSyncFrequency,
+            ),
+            const Divider(),
+            ListTile(
+              leading: Icon(
+                Iconsax.crown_1_bold,
+                color: Colors.amber,
+              ),
+              title: const Text(
+                'Subscription Plans',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+              subtitle: const Text('Upgrade to unlock premium features'),
+              trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+              onTap: () => Get.toNamed(Routes.PLANS),
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.info_outline),
+              title: const Text('About'),
+              subtitle: const Text('Version 1.0.0'),
+              onTap: () {
+                // Show about dialog or navigate to about page
+                Get.dialog(
+                  AlertDialog(
+                    title: const Text('About Syncy'),
+                    content: const Text(
+                      'Syncy - The Ultimate Cross-Platform Media Sync & Watch Party App\n\n'
+                      'Built with 💜 by passionate developers\n\n'
+                      'Version 1.0.0',
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Get.back(),
+                        child: const Text('Close'),
+                      ),
+                    ],
+                  ),
+                );
+              },
             ),
           ],
         ),

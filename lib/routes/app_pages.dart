@@ -1,9 +1,11 @@
 import 'package:get/get.dart';
 import 'package:syncy/bindings/home_binding.dart';
+import 'package:syncy/bindings/plans_binding.dart';
 import 'package:syncy/bindings/profile_binding.dart';
 import 'package:syncy/bindings/settings_binding.dart';
 import 'package:syncy/routes/app_routes.dart';
 import 'package:syncy/screens/home/home_screen.dart';
+import 'package:syncy/screens/plans/plans_screen.dart';
 import 'package:syncy/screens/profile/profile_screen.dart';
 import 'package:syncy/screens/room/room_screen.dart';
 import 'package:syncy/screens/settings/settings_screen.dart';
@@ -31,6 +33,11 @@ class AppPages {
     GetPage(
       name: Routes.ROOM,
       page: () => const RoomScreen(),
+    ),
+    GetPage(
+      name: Routes.PLANS,
+      page: () => const PlansScreen(),
+      binding: PlansBinding(),
     ),
   ];
 }

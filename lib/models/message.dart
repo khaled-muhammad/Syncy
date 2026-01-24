@@ -10,6 +10,8 @@ enum MessageType {
   userLeft,
   error,
   heartbeat,
+  chat,
+  reaction,
 }
 
 class Message {
@@ -135,10 +137,7 @@ class Message {
       type: MessageType.videoChanged,
       roomId: roomId,
       userId: userId,
-      data: {
-        'videoUrl': videoUrl,
-        'videoTitle': videoTitle,
-      },
+      data: {'videoUrl': videoUrl, 'videoTitle': videoTitle},
     );
   }
 
@@ -151,23 +150,44 @@ class Message {
       type: MessageType.join,
       roomId: roomId,
       userId: userId,
-      data: {
-        'userName': userName,
-        'name': userName,
-        'id': userId,
-      },
+      data: {'userName': userName, 'name': userName, 'id': userId},
     );
   }
 
-  factory Message.leaveRoom({
-    required String roomId,
-    required String userId,
-  }) {
+  factory Message.leaveRoom({required String roomId, required String userId}) {
     return Message(
       type: MessageType.leave,
       roomId: roomId,
       userId: userId,
       data: {},
+    );
+  }
+
+  factory Message.chat({
+    required String roomId,
+    required String userId,
+    required String userName,
+    required String message,
+  }) {
+    return Message(
+      type: MessageType.chat,
+      roomId: roomId,
+      userId: userId,
+      data: {'message': message, 'userName': userName},
+    );
+  }
+
+  factory Message.reaction({
+    required String roomId,
+    required String userId,
+    required String userName,
+    required String emoji,
+  }) {
+    return Message(
+      type: MessageType.reaction,
+      roomId: roomId,
+      userId: userId,
+      data: {'emoji': emoji, 'userName': userName},
     );
   }
 }

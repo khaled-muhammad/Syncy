@@ -69,7 +69,11 @@ class Room {
       //     .toList(),
       currentVideoUrl: json['current_video_url'],
       currentVideoTitle: json['current_video_title'],
-      currentPosition: Duration(seconds: int.tryParse(json['current_position']) ?? 0),
+      currentPosition: Duration(
+        seconds: json['current_position'] is int
+            ? json['current_position']
+            : int.tryParse(json['current_position']?.toString() ?? '0') ?? 0,
+      ),
       isPlaying: json['is_playing'] ?? false,
       createdAt: DateTime.parse(json['created_at']),
     );

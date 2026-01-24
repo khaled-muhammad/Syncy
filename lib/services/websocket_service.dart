@@ -114,7 +114,10 @@ class WebSocketService extends GetxService {
     _startHeartbeat();
     _onConnected?.call();
     // Auto rejoin if needed
-    if (_shouldReconnect && _currentRoomId != null && _currentUserId != null && _currentUserName != null) {
+    if (_shouldReconnect &&
+        _currentRoomId != null &&
+        _currentUserId != null &&
+        _currentUserName != null) {
       final joinMsg = Message.joinRoom(
         roomId: _currentRoomId!,
         userId: _currentUserId!,
@@ -299,9 +302,41 @@ class WebSocketService extends GetxService {
       type: MessageType.heartbeat,
       roomId: roomId,
       userId: userId,
-      data: {
-        'timestamp': DateTime.now().millisecondsSinceEpoch,
-      },
+      data: {'timestamp': DateTime.now().millisecondsSinceEpoch},
+    );
+    await sendMessage(message);
+  }
+
+  Future<void> sendChat(
+    String roomId,
+    String userId,
+    String userName,
+    String messageText,
+  ) async {
+    if (!_ensureConnected()) return;
+
+    final message = Message.chat(
+      roomId: roomId,
+      userId: userId,
+      userName: userName,
+      message: messageText,
+    );
+    await sendMessage(message);
+  }
+
+  Future<void> sendReaction(
+    String roomId,
+    String userId,
+    String userName,
+    String emoji,
+  ) async {
+    if (!_ensureConnected()) return;
+
+    final message = Message.reaction(
+      roomId: roomId,
+      userId: userId,
+      userName: userName,
+      emoji: emoji,
     );
     await sendMessage(message);
   }

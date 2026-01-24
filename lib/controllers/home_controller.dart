@@ -65,7 +65,7 @@ class HomeController extends GetxController {
     media.value = realm.all<Media>().toList();
     try {
       // final localStoragePath = await localStorageDir(); XXX
-      final localStoragePath = "${await localStorageDir()}/testing_syncy";
+      final localStoragePath = await localStorageDir();
       print('Local storage path: $localStoragePath');
       currentDirectory.value = localStoragePath;
 
@@ -92,12 +92,7 @@ class HomeController extends GetxController {
         if (existingMedia == null) {
           realm.write(() {
             final fileName = path.split('/').last;
-            final newMedia = Media(
-              ObjectId(),
-              path,
-              fileName,
-              '',
-            );
+            final newMedia = Media(ObjectId(), path, fileName, '');
             realm.add(newMedia);
           });
           newVideoPaths.add(path);

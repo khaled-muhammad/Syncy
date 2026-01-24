@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/widgets.dart';
 import 'package:get/get.dart';
 import 'package:syncy/models/message.dart';
 import 'package:uuid/uuid.dart' as u;
@@ -30,6 +29,12 @@ class RoomController extends GetxController {
 
   late RxList<RoomUser> users = <RoomUser>[].obs;
 
+  // Chat messages
+  RxList<Map<String, dynamic>> chatMessages = <Map<String, dynamic>>[].obs;
+
+  // Floating reactions
+  RxList<Map<String, dynamic>> floatingReactions = <Map<String, dynamic>>[].obs;
+
   Rx<Room> room = Room(
     id: '',
     name: '',
@@ -46,10 +51,10 @@ class RoomController extends GetxController {
 
   // Add subtitle path storage
   Rx<String?> currentSubtitlePath = Rx<String?>(null);
-  
+
   // Add subtitle delay in milliseconds (can be positive or negative)
   Rx<int> subtitleDelay = Rx<int>(0);
-  
+
   // Callback for when subtitles change
   Function()? onSubtitleChanged;
 
@@ -78,7 +83,28 @@ class RoomController extends GetxController {
             name: msg.data['name'],
             online: false,
           );
-        } 
+        }
+      } else if (msg.type == MessageType.chat) {
+        // Add chat message to list
+        chatMessages.add({
+          'message': msg.data['message'] ?? '',
+          'userName': msg.data['userName'] ?? 'Unknown',
+          'userId': msg.data['userId'] ?? '',
+          'timestamp':
+              msg.data['timestamp'] ?? DateTime.now().toIso8601String(),
+        });
+      } else if (msg.type == MessageType.reaction) {
+        // Add floating reaction
+        final reactionId = DateTime.now().millisecondsSinceEpoch.toString();
+        floatingReactions.add({
+          'id': reactionId,
+          'emoji': msg.data['emoji'] ?? '❤️',
+          'userName': msg.data['userName'] ?? 'Unknown',
+        });
+        // Auto-remove after 3 seconds
+        Future.delayed(const Duration(seconds: 3), () {
+          floatingReactions.removeWhere((r) => r['id'] == reactionId);
+        });
       }
     });
   }
@@ -93,11 +119,7 @@ class RoomController extends GetxController {
       );
     } else {
       users.add(
-        RoomUser(
-          id: data['id'],
-          name: data['name'],
-          online: data['is_online'],
-        ),
+        RoomUser(id: data['id'], name: data['name'], online: data['is_online']),
       );
     }
   }
@@ -122,12 +144,12 @@ class RoomController extends GetxController {
         if (file.path != null) {
           currentSubtitlePath.value = file.path;
           print('Subtitle file selected: ${file.path}');
-          
+
           // Notify listeners that subtitle changed
           if (onSubtitleChanged != null) {
             onSubtitleChanged!();
           }
-          
+
           Get.snackbar(
             'Subtitle Selected',
             'Subtitle file loaded: ${file.name}',
@@ -149,12 +171,12 @@ class RoomController extends GetxController {
   // Method to clear subtitle
   void clearSubtitle() {
     currentSubtitlePath.value = null;
-    
+
     // Notify listeners that subtitle changed
     if (onSubtitleChanged != null) {
       onSubtitleChanged!();
     }
-    
+
     Get.snackbar(
       'Subtitle Cleared',
       'Subtitle has been removed',
@@ -166,12 +188,12 @@ class RoomController extends GetxController {
   // Method to set subtitle delay
   void setSubtitleDelay(int delayMs) {
     subtitleDelay.value = delayMs;
-    
+
     // Notify listeners that subtitle settings changed
     if (onSubtitleChanged != null) {
       onSubtitleChanged!();
     }
-    
+
     Get.snackbar(
       'Subtitle Delay',
       'Subtitle delay set to ${delayMs}ms',
@@ -291,6 +313,9 @@ class RoomController extends GetxController {
         data: {'user_id': _uuid},
       );
 
+      users.clear();
+      chatMessages.clear();
+      floatingReactions.clear();
       room.value = Room(
         createdAt: DateTime.now(),
         id: '',
@@ -305,5 +330,22 @@ class RoomController extends GetxController {
         hostId: '',
       );
     }
+  }
+
+  // Send chat message
+  Future<void> sendChatMessage(String messageText) async {
+    if (room.value.id == '' || messageText.trim().isEmpty) return;
+    await wsService.sendChat(
+      room.value.id,
+      _uuid,
+      user.name,
+      messageText.trim(),
+    );
+  }
+
+  // Send reaction
+  Future<void> sendReaction(String emoji) async {
+    if (room.value.id == '') return;
+    await wsService.sendReaction(room.value.id, _uuid, user.name, emoji);
   }
 }

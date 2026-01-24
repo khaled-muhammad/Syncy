@@ -11,7 +11,9 @@ import 'package:icons_plus/icons_plus.dart';
 import 'package:syncy/controllers/home_controller.dart';
 import 'package:syncy/controllers/room_controller.dart';
 import 'package:syncy/screens/search/seach_screen.dart';
+import 'package:syncy/widgets/chat_panel.dart';
 import 'package:syncy/widgets/custom_video_player.dart';
+import 'package:syncy/widgets/reaction_overlay.dart';
 import 'package:video_player/video_player.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
@@ -179,89 +181,111 @@ class _RoomScreenState extends State<RoomScreen> {
                 exitPop();
               }
             },
-            child: Column(
+            child: Stack(
               children: [
-                controller.videoController != null
-                    ? Container(
-                        constraints: BoxConstraints(
-                          maxHeight: MediaQuery.of(context).size.height * 0.5,
-                        ),
-                        alignment: Alignment.center, // Center the video
-                        child: AspectRatio(
-                          aspectRatio:
-                              controller.videoController!.value.aspectRatio,
-                          child: Stack(
-                            children: [
-                              VideoPlayer(controller.videoController!),
-                              ControlsOverlay(
-                                controller: controller.videoController!,
-                                onPlayToggle: (isPlaying) {
-                                  if (isPlaying) {
-                                    controller.playVideo();
-                                  } else {
-                                    controller.pauseVideo();
-                                  }
-                                },
-                                onSeek: (position) {
-                                  controller.seekVideo(position);
-                                },
-                              ),
-                            ],
-                          ),
-                        ),
-                      )
-                    : Center(
-                        child: Container(
-                          decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                              colors: [Color(0xFF8E2DE2), Color(0xFF4A00E0)],
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
+                Column(
+                  children: [
+                    controller.videoController != null
+                        ? Container(
+                            constraints: BoxConstraints(
+                              maxHeight:
+                                  MediaQuery.of(context).size.height * 0.4,
                             ),
-                            borderRadius: BorderRadius.circular(30),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.purple.withValues(alpha: 0.4),
-                                blurRadius: 20,
-                                offset: const Offset(0, 10),
+                            alignment: Alignment.center,
+                            child: AspectRatio(
+                              aspectRatio:
+                                  controller.videoController!.value.aspectRatio,
+                              child: Stack(
+                                children: [
+                                  VideoPlayer(controller.videoController!),
+                                  ControlsOverlay(
+                                    controller: controller.videoController!,
+                                    onPlayToggle: (isPlaying) {
+                                      if (isPlaying) {
+                                        controller.playVideo();
+                                      } else {
+                                        controller.pauseVideo();
+                                      }
+                                    },
+                                    onSeek: (position) {
+                                      controller.seekVideo(position);
+                                    },
+                                  ),
+                                ],
                               ),
-                            ],
-                          ),
-                          child: ElevatedButton(
-                            onPressed: () {
-                              Get.to(
-                                () => SearchScreen(
-                                  media: Get.find<HomeController>().media,
-                                  onSelect: (selectedMedia) {
-                                    controller.setMedia(selectedMedia);
-                                    setupPlayer();
-                                  },
+                            ),
+                          )
+                        : Center(
+                            child: Container(
+                              decoration: BoxDecoration(
+                                gradient: const LinearGradient(
+                                  colors: [
+                                    Color(0xFF8E2DE2),
+                                    Color(0xFF4A00E0),
+                                  ],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
                                 ),
-                              );
-                            },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.transparent,
-                              shadowColor: Colors.transparent,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 32,
-                                vertical: 18,
-                              ),
-                              shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(30),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.purple.withValues(alpha: 0.4),
+                                    blurRadius: 20,
+                                    offset: const Offset(0, 10),
+                                  ),
+                                ],
                               ),
-                              textStyle: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: 1.1,
+                              child: ElevatedButton(
+                                onPressed: () {
+                                  Get.to(
+                                    () => SearchScreen(
+                                      media: Get.find<HomeController>().media,
+                                      onSelect: (selectedMedia) {
+                                        controller.setMedia(selectedMedia);
+                                        setupPlayer();
+                                      },
+                                    ),
+                                  );
+                                },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.transparent,
+                                  shadowColor: Colors.transparent,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 32,
+                                    vertical: 18,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(30),
+                                  ),
+                                  textStyle: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 1.1,
+                                  ),
+                                ),
+                                child: const Text(
+                                  "Choose Media",
+                                  style: TextStyle(color: Colors.white),
+                                ),
                               ),
-                            ),
-                            child: const Text(
-                              "Choose Media",
-                              style: TextStyle(color: Colors.white),
                             ),
                           ),
-                        ),
+                    // Reaction bar
+                    const SizedBox(height: 12),
+                    const ReactionBar(),
+                    const SizedBox(height: 12),
+                    // Chat panel
+                    const Expanded(
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 12),
+                        child: ChatPanel(),
                       ),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                ),
+                // Floating reactions overlay
+                const ReactionOverlay(),
               ],
             ),
           ),

@@ -5,4 +5,5 @@ abstract class Routes {
   static const SETTINGS = '/settings';
   static const PROFILE = '/profile';
   static const ROOM = '/room';
+  static const PLANS = '/plans';
 }
