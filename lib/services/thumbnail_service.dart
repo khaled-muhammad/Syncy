@@ -3,7 +3,7 @@ import 'dart:io';
 import 'dart:isolate';
 import 'package:get/get.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:realm/realm.dart';
+import 'package:isar_community/isar.dart';
 import 'package:get_thumbnail_video/video_thumbnail.dart';
 import 'package:get_thumbnail_video/index.dart';
 import 'package:syncy/models/media.dart';
@@ -32,7 +32,7 @@ class ThumbnailRequest {
 class ThumbnailService extends GetxService {
   static ThumbnailService get to => Get.find<ThumbnailService>();
 
-  final Realm _realm = Get.find<Realm>();
+  final Isar _isar = Get.find<Isar>();
   final RxList<ThumbnailRequest> _requestQueue = <ThumbnailRequest>[].obs;
   final RxBool _isProcessing = false.obs;
   final RxInt _processedCount = 0.obs;
@@ -107,11 +107,14 @@ class ThumbnailService extends GetxService {
       final thumbnailPath =
           '$_thumbnailsDirectory/${nameWithoutExtension}_${DateTime.now().millisecondsSinceEpoch}.jpg';
 
-      final existingMedia = _realm
-          .query<Media>("path == '$videoPath'")
-          .firstOrNull;
-      if (existingMedia != null && existingMedia.thumbnailPath.isNotEmpty) {
-        final existingThumbnail = File(existingMedia.thumbnailPath);
+      final existingMedia = _isar.medias
+          .filter()
+          .pathEqualTo(videoPath)
+          .findFirstSync();
+      if (existingMedia != null &&
+          existingMedia.thumbnailPath != null &&
+          existingMedia.thumbnailPath!.isNotEmpty) {
+        final existingThumbnail = File(existingMedia.thumbnailPath!);
         if (await existingThumbnail.exists()) {
           print('Thumbnail already exists for: $videoPath');
           return existingMedia.thumbnailPath;
@@ -143,9 +146,12 @@ class ThumbnailService extends GetxService {
 
   Future<void> generateMissingThumbnails() async {
     try {
-      final mediaWithoutThumbnails = _realm
-          .query<Media>("thumbnailPath == ''")
-          .toList();
+      final mediaWithoutThumbnails = _isar.medias
+          .filter()
+          .thumbnailPathIsNull()
+          .or()
+          .thumbnailPathEqualTo('')
+          .findAllSync();
       print(
         'Found ${mediaWithoutThumbnails.length} media files without thumbnails',
       );
@@ -196,9 +202,10 @@ class ThumbnailService extends GetxService {
 
         print('Thumbnail generated successfully: $thumbnailPath');
 
-        final media = _realm
-            .query<Media>("path == '${request.videoPath}'")
-            .firstOrNull;
+        final media = _isar.medias
+            .filter()
+            .pathEqualTo(request.videoPath)
+            .findFirstSync();
         if (media != null) {
           for (final callback in _onThumbnailCompleted) {
             callback(media);
@@ -254,26 +261,28 @@ class ThumbnailService extends GetxService {
     String thumbnailPath,
   ) async {
     try {
-      _realm.write(() {
-        final existingMedia = _realm
-            .query<Media>("path == '$videoPath'")
-            .firstOrNull;
+      final existingMedia = _isar.medias
+          .filter()
+          .pathEqualTo(videoPath)
+          .findFirstSync();
 
-        if (existingMedia != null) {
-          existingMedia.thumbnailPath = thumbnailPath;
-          print('Updated existing media with thumbnail: $videoPath');
-        } else {
-          final fileName = videoPath.split('/').last;
-          final newMedia = Media(
-            ObjectId(),
-            videoPath,
-            fileName,
-            thumbnailPath,
-          );
-          _realm.add(newMedia);
-          print('Created new media record with thumbnail: $videoPath');
-        }
-      });
+      if (existingMedia != null) {
+        existingMedia.thumbnailPath = thumbnailPath;
+        _isar.writeTxnSync(() {
+          _isar.medias.putSync(existingMedia);
+        });
+        print('Updated existing media with thumbnail: $videoPath');
+      } else {
+        final fileName = videoPath.split('/').last;
+        final newMedia = Media()
+          ..path = videoPath
+          ..name = fileName
+          ..thumbnailPath = thumbnailPath;
+        _isar.writeTxnSync(() {
+          _isar.medias.putSync(newMedia);
+        });
+        print('Created new media record with thumbnail: $videoPath');
+      }
     } catch (e) {
       print('Error updating media with thumbnail: $e');
       rethrow;
@@ -282,9 +291,14 @@ class ThumbnailService extends GetxService {
 
   String? getThumbnailPath(String videoPath) {
     try {
-      final media = _realm.query<Media>("path == '$videoPath'").firstOrNull;
-      if (media != null && media.thumbnailPath.isNotEmpty) {
-        final thumbnailFile = File(media.thumbnailPath);
+      final media = _isar.medias
+          .filter()
+          .pathEqualTo(videoPath)
+          .findFirstSync();
+      if (media != null &&
+          media.thumbnailPath != null &&
+          media.thumbnailPath!.isNotEmpty) {
+        final thumbnailFile = File(media.thumbnailPath!);
         if (thumbnailFile.existsSync()) {
           return media.thumbnailPath;
         }
@@ -329,10 +343,10 @@ class ThumbnailService extends GetxService {
           .where((entity) => entity is File)
           .cast<File>()
           .toList();
-      final referencedThumbnails = _realm
-          .all<Media>()
+      final allMedia = _isar.medias.where().findAllSync();
+      final referencedThumbnails = allMedia
           .map((m) => m.thumbnailPath)
-          .where((path) => path.isNotEmpty)
+          .where((path) => path != null && path.isNotEmpty)
           .toSet();
 
       int deletedCount = 0;

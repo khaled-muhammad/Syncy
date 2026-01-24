@@ -2,15 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:syncy/models/message.dart';
 import 'package:uuid/uuid.dart' as u;
-import 'package:realm/realm.dart';
+import 'package:isar_community/isar.dart';
+import 'package:dio/dio.dart';
 import 'package:syncy/constants/app_constants.dart';
 import 'package:syncy/models/media.dart';
 import 'package:syncy/models/room.dart';
 import 'package:syncy/models/user.dart';
 import 'package:syncy/routes/app_routes.dart';
 import 'package:syncy/services/websocket_service.dart';
-import 'package:top_snackbar_flutter/custom_snack_bar.dart';
-import 'package:top_snackbar_flutter/top_snack_bar.dart';
 import 'package:video_player/video_player.dart';
 import 'package:file_picker/file_picker.dart';
 
@@ -23,8 +22,9 @@ class RoomUser {
 }
 
 class RoomController extends GetxController {
-  final realm = Get.find<Realm>();
-  User get user => realm.all<User>().first;
+  final isar = Get.find<Isar>();
+  User get user => isar.users.where().findFirstSync() ?? User()
+    ..name = 'Guest';
   String _uuid = const u.Uuid().v4();
 
   late RxList<RoomUser> users = <RoomUser>[].obs;
@@ -203,57 +203,95 @@ class RoomController extends GetxController {
   }
 
   Future createRoom(String roomName, {Media? mediaItem}) async {
-    final res = await AppConstants.dio.post(
-      '/rooms/create/',
-      data: {'room_name': roomName, 'user_name': user.name},
-    );
-
-    if (res.data['status'] == 'success') {
-      showTopSnackBar(
-        Overlay.of(Get.overlayContext!),
-        CustomSnackBar.success(message: res.data['message']),
+    try {
+      final res = await AppConstants.dio.post(
+        '/rooms/create/',
+        data: {'room_name': roomName, 'user_name': user.name},
       );
-      room.value = Room.fromJson(res.data['room']);
-      if (mediaItem != null) {
-        room.value.currentVideoUrl = mediaItem.path;
-        room.value.currentVideoTitle = mediaItem.name;
-      }
-      _uuid = res.data['user']['id'];
-      await wsService.joinRoom(room.value.id, _uuid, user.name);
 
-      Get.toNamed(Routes.ROOM);
-    } else {
-      showTopSnackBar(
-        Overlay.of(Get.overlayContext!),
-        CustomSnackBar.error(message: res.data['message']),
+      if (res.data['status'] == 'success') {
+        Get.snackbar(
+          'Success',
+          res.data['message'],
+          backgroundColor: Colors.green.withValues(alpha: 0.8),
+          colorText: Colors.white,
+          snackPosition: SnackPosition.TOP,
+        );
+        room.value = Room.fromJson(res.data['room']);
+        if (mediaItem != null) {
+          room.value.currentVideoUrl = mediaItem.path;
+          room.value.currentVideoTitle = mediaItem.name;
+        }
+        _uuid = res.data['user']['id'];
+        await wsService.joinRoom(room.value.id, _uuid, user.name);
+
+        Get.toNamed(Routes.ROOM);
+      } else {
+        Get.snackbar(
+          'Error',
+          res.data['message'],
+          backgroundColor: Colors.red.withValues(alpha: 0.8),
+          colorText: Colors.white,
+          snackPosition: SnackPosition.TOP,
+        );
+      }
+    } on DioException catch (e) {
+      final serverMessage =
+          e.response?.data['message'] ??
+          e.response?.data['error'] ??
+          'Failed to create room';
+      Get.snackbar(
+        'Error',
+        serverMessage,
+        backgroundColor: Colors.red.withValues(alpha: 0.8),
+        colorText: Colors.white,
+        snackPosition: SnackPosition.TOP,
       );
     }
   }
 
   Future joinRoom(String roomId) async {
-    final res = await AppConstants.dio.post(
-      '/rooms/join/',
-      data: {'room_id': roomId, 'user_name': user.name},
-    );
-
-    if (res.data['status'] == 'success') {
-      showTopSnackBar(
-        Overlay.of(Get.overlayContext!),
-        CustomSnackBar.success(message: res.data['message']),
+    try {
+      final res = await AppConstants.dio.post(
+        '/rooms/join/',
+        data: {'room_id': roomId, 'user_name': user.name},
       );
-      room.value = Room.fromJson(res.data['room']);
-      for (Map user in res.data['room']['users']) {
-        setUser(user);
-      }
 
-      await wsService.joinRoom(room.value.id, _uuid, user.name);
-      Get.toNamed(Routes.ROOM);
-    } else {
-      showTopSnackBar(
-        Overlay.of(Get.overlayContext!),
-        CustomSnackBar.error(
-          message: res.data['message'] ?? 'Failed to join room',
-        ),
+      if (res.data['status'] == 'success') {
+        Get.snackbar(
+          'Success',
+          res.data['message'],
+          backgroundColor: Colors.green.withValues(alpha: 0.8),
+          colorText: Colors.white,
+          snackPosition: SnackPosition.TOP,
+        );
+        room.value = Room.fromJson(res.data['room']);
+        for (Map user in res.data['room']['users']) {
+          setUser(user);
+        }
+
+        await wsService.joinRoom(room.value.id, _uuid, user.name);
+        Get.toNamed(Routes.ROOM);
+      } else {
+        Get.snackbar(
+          'Error',
+          res.data['message'] ?? 'Failed to join room',
+          backgroundColor: Colors.red.withValues(alpha: 0.8),
+          colorText: Colors.white,
+          snackPosition: SnackPosition.TOP,
+        );
+      }
+    } on DioException catch (e) {
+      final serverMessage =
+          e.response?.data['message'] ??
+          e.response?.data['error'] ??
+          'Failed to join room';
+      Get.snackbar(
+        'Error',
+        serverMessage,
+        backgroundColor: Colors.red.withValues(alpha: 0.8),
+        colorText: Colors.white,
+        snackPosition: SnackPosition.TOP,
       );
     }
   }

@@ -1,7 +1,7 @@
 import 'dart:io';
 
 import 'package:get/get.dart';
-import 'package:realm/realm.dart';
+import 'package:isar_community/isar.dart';
 import 'package:syncy/constants/app_constants.dart';
 import 'package:syncy/models/media.dart';
 import 'package:syncy/services/thumbnail_service.dart';
@@ -13,7 +13,7 @@ class HomeController extends GetxController {
   final isLoading = true.obs;
   final currentDirectory = ''.obs;
   final hasPermission = false.obs;
-  final realm = Get.find<Realm>();
+  final isar = Get.find<Isar>();
   final thumbnailService = Get.find<ThumbnailService>();
 
   final activeIndex = 1.obs;
@@ -61,10 +61,9 @@ class HomeController extends GetxController {
   Future<void> loadMediaFiles() async {
     isLoading.value = true;
     media.clear();
-    print("REALM");
-    media.value = realm.all<Media>().toList();
+    print("ISAR");
+    media.value = isar.medias.where().findAllSync();
     try {
-      // final localStoragePath = await localStorageDir(); XXX
       final localStoragePath = await localStorageDir();
       print('Local storage path: $localStoragePath');
       currentDirectory.value = localStoragePath;
@@ -88,12 +87,18 @@ class HomeController extends GetxController {
 
       final List<String> newVideoPaths = [];
       for (String path in mediaFiles) {
-        final existingMedia = realm.query<Media>("path == '$path'").firstOrNull;
+        final existingMedia = isar.medias
+            .filter()
+            .pathEqualTo(path)
+            .findFirstSync();
         if (existingMedia == null) {
-          realm.write(() {
-            final fileName = path.split('/').last;
-            final newMedia = Media(ObjectId(), path, fileName, '');
-            realm.add(newMedia);
+          final fileName = path.split('/').last;
+          final newMedia = Media()
+            ..path = path
+            ..name = fileName
+            ..thumbnailPath = '';
+          isar.writeTxnSync(() {
+            isar.medias.putSync(newMedia);
           });
           newVideoPaths.add(path);
           print("Created new media record for: $path");
@@ -107,7 +112,7 @@ class HomeController extends GetxController {
 
       await thumbnailService.generateMissingThumbnails();
 
-      media.value = realm.all<Media>().toList();
+      media.value = isar.medias.where().findAllSync();
       print('Found ${media.length} media files');
     } catch (e) {
       print('Error loading media files: $e');

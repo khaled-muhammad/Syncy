@@ -68,12 +68,17 @@ def join_room(request):
         
         room = get_object_or_404(Room, id=room_id)
         
-        # Check if username is already taken in this room
-        if User.objects.filter(room=room, name=user_name).exists():
+        # Check if username is already taken by an ONLINE user in this room
+        existing_user = User.objects.filter(room=room, name=user_name).first()
+        if existing_user and existing_user.is_online:
             return Response({
                 'status': 'error',
                 'message': 'Username already taken in this room'
             }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # If user exists but is offline, allow them to rejoin
+        if existing_user and not existing_user.is_online:
+            logger.info(f"User {user_name} rejoining room {room.name}")
         
         logger.info(f"User {user_name} attempting to join room {room.name}")
         

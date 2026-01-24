@@ -1,9 +1,8 @@
-import 'package:realm/realm.dart';
-part 'user.realm.dart';
+import 'package:isar_community/isar.dart';
+part 'user.g.dart';
 
-@RealmModel()
-class _User {
-  @PrimaryKey()
-  late ObjectId id;
+@collection
+class User {
+  Id id = Isar.autoIncrement;
   late String name;
 }

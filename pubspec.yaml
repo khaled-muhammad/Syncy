@@ -38,7 +38,6 @@ dependencies:
   permission_handler: ^12.0.0+1
   path_provider: ^2.1.2
   shared_preferences: ^2.2.2
-  realm: ^20.1.1
   flutter_video_info: ^1.3.3
   image_size_getter: ^2.4.0
   get_thumbnail_video: ^0.7.3
@@ -46,14 +45,15 @@ dependencies:
   flutter_blurhash: ^0.9.1
   dio: ^5.8.0+1
   top_snackbar_flutter: ^3.3.0
-  fvp: ^0.32.1
   video_player: ^2.10.0
-  awesome_dialog: ^3.2.1
   web_socket_channel: ^3.0.3
   uuid: ^4.5.1
   icons_plus: ^5.0.0
   file_picker: ^8.1.5
   wakelock_plus: ^1.1.4
+  isar_community: ^3.3.0
+  isar_community_flutter_libs: ^3.3.0
+  panara_dialogs: ^0.1.5
 
 dev_dependencies:
   flutter_test:
@@ -65,6 +65,9 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^5.0.0
+  isar_community_generator: ^3.3.0
+  build_runner: ^2.7.1
+  flutter_launcher_icons: ^0.14.4
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -106,3 +109,9 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/icon/app_icon.png"
+  min_sdk_android: 21

@@ -6,18 +6,12 @@
 
 #include "generated_plugin_registrant.h"
 
-#include <fvp/fvp_plugin_c_api.h>
+#include <isar_community_flutter_libs/isar_flutter_libs_plugin.h>
 #include <permission_handler_windows/permission_handler_windows_plugin.h>
-#include <realm/realm_plugin.h>
-#include <rive_native/rive_native_plugin.h>
 
 void RegisterPlugins(flutter::PluginRegistry* registry) {
-  FvpPluginCApiRegisterWithRegistrar(
-      registry->GetRegistrarForPlugin("FvpPluginCApi"));
+  IsarFlutterLibsPluginRegisterWithRegistrar(
+      registry->GetRegistrarForPlugin("IsarFlutterLibsPlugin"));
   PermissionHandlerWindowsPluginRegisterWithRegistrar(
       registry->GetRegistrarForPlugin("PermissionHandlerWindowsPlugin"));
-  RealmPluginRegisterWithRegistrar(
-      registry->GetRegistrarForPlugin("RealmPlugin"));
-  RiveNativePluginRegisterWithRegistrar(
-      registry->GetRegistrarForPlugin("RiveNativePlugin"));
 }

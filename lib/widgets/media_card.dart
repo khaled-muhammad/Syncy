@@ -18,14 +18,16 @@ class MediaCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bool hasThumbnail = mediaElement.thumbnailPath.isNotEmpty;
+    final bool hasThumbnail =
+        mediaElement.thumbnailPath != null &&
+        mediaElement.thumbnailPath!.isNotEmpty;
 
     return Container(
       decoration: BoxDecoration(
         color: isAudio ? Colors.deepPurple.shade300 : null,
         image: !isAudio && hasThumbnail
             ? DecorationImage(
-                image: FileImage(File(mediaElement.thumbnailPath)),
+                image: FileImage(File(mediaElement.thumbnailPath!)),
                 fit: BoxFit.cover,
               )
             : null,
@@ -51,7 +53,11 @@ class MediaCard extends StatelessWidget {
                       children: [
                         Padding(
                           padding: const EdgeInsets.only(
-                            left: 8, right: 8, bottom: 4, top: 20),
+                            left: 8,
+                            right: 8,
+                            bottom: 4,
+                            top: 20,
+                          ),
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
@@ -97,7 +103,9 @@ class MediaCard extends StatelessWidget {
                     child: IconButton(
                       onPressed: onPressed,
                       icon: Icon(
-                        isAudio ? Icons.headphones_rounded : Icons.play_arrow_rounded,
+                        isAudio
+                            ? Icons.headphones_rounded
+                            : Icons.play_arrow_rounded,
                         color: Colors.white,
                       ),
                       padding: EdgeInsets.zero,

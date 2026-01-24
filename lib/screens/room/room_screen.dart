@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
 
-import 'package:awesome_dialog/awesome_dialog.dart';
+import 'package:panara_dialogs/panara_dialogs.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_blurhash/flutter_blurhash.dart';
@@ -40,18 +40,22 @@ class _RoomScreenState extends State<RoomScreen> {
   }
 
   void exitPop() {
-    AwesomeDialog(
-      context: context,
-      dialogType: DialogType.question,
-      animType: AnimType.scale,
+    PanaraConfirmDialog.showAnimatedGrow(
+      context,
       title: 'Confirmation',
-      desc: 'Are you sure you want to leave the room?',
-      btnCancelOnPress: () {},
-      btnOkOnPress: () {
+      message: 'Are you sure you want to leave the room?',
+      confirmButtonText: 'Leave',
+      cancelButtonText: 'Cancel',
+      onTapCancel: () {
+        Navigator.pop(context);
+      },
+      onTapConfirm: () {
+        Navigator.pop(context);
         Get.back();
         Get.back();
       },
-    ).show();
+      panaraDialogType: PanaraDialogType.warning,
+    );
   }
 
   Future setupPlayer() async {

@@ -21,7 +21,7 @@ final List<String> mediaExtensions = imageExtensions+videoExtensions;
 
 class AppConstants {
   // API URLs
-  static const String baseDomain = 'syncplay-backend.khaled.hackclub.app';
+  static const String baseDomain = 'syncy-backend.mywire.org';
 
   static const String baseUrl = 'https://$baseDomain';
   static const String apiBaseUrl = '$baseUrl/api';

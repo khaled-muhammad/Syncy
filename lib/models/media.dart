@@ -1,24 +1,23 @@
-import 'package:realm/realm.dart';
-part 'media.realm.dart';
+import 'package:isar_community/isar.dart';
+part 'media.g.dart';
 
 enum MediaType { image, video, unknown }
 
-@RealmModel()
-class _Folder {
-  @PrimaryKey()
-  late ObjectId id;
+@collection
+class Folder {
+  Id id = Isar.autoIncrement;
   late String path;
   late String name;
-  late List<_Media> entities;
+  final entities = IsarLinks<Media>();
 }
 
-@RealmModel()
-class _Media {
-  @PrimaryKey()
-  late ObjectId id;
+@collection
+class Media {
+  Id id = Isar.autoIncrement;
   late String path;
   late String name;
-  late String thumbnailPath;
-  @Backlink(#entities)
-  late Iterable<_Folder> folder;
+  String? thumbnailPath;
+
+  @Backlink(to: 'entities')
+  final folder = IsarLinks<Folder>();
 }

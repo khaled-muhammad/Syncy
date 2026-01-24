@@ -1,26 +1,30 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:realm/realm.dart';
+import 'package:isar_community/isar.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:syncy/controllers/room_controller.dart';
 import 'package:syncy/models/media.dart';
 import 'package:syncy/models/user.dart';
 import 'package:syncy/routes/app_pages.dart';
 import 'package:syncy/services/thumbnail_service.dart';
 import 'package:syncy/theme/app_theme.dart';
-import 'package:fvp/fvp.dart' as fvp;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  var config = Configuration.local([Folder.schema, Media.schema, User.schema]);
-  var realm = Realm(config);
-  Get.put(realm);
+  // Initialize Isar
+  final dir = await getApplicationDocumentsDirectory();
+  final isar = await Isar.open([
+    FolderSchema,
+    MediaSchema,
+    UserSchema,
+  ], directory: dir.path);
+  Get.put(isar);
 
   // Initialize ThumbnailService
   Get.put(ThumbnailService());
   Get.lazyPut<RoomController>(() => RoomController(), fenix: true);
-  
-  fvp.registerWith();
+
   runApp(const MyApp());
 }
 
