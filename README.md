@@ -31,15 +31,6 @@
 
 ---
 
-## 🎥 Demo
-
-<div align="center">
-  <video src="landing_website/public/example.mp4" width="600" controls>
-    Your browser does not support the video tag.
-  </video>
-</div>
-
----
 
 ## 🛠️ Quick Start
 
