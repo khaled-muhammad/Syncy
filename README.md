@@ -3,14 +3,20 @@
 ### *Real-Time Cross-Platform Media Sync & Watch Party App*
 
 <div align="center">
-  <img src="landing_website/public/logo.png" alt="Syncy Logo" width="200"/>
-
+  <img src="landing_website/public/logo.png" alt="Syncy Logo" width="120"/>
+  
+  [![Website](https://img.shields.io/badge/website-synncy.netlify.app-blue?style=flat-square)](https://synncy.netlify.app/)
   ![Flutter](https://img.shields.io/badge/Flutter-02569B?style=flat-square&logo=flutter&logoColor=white)
-  ![Dart](https://img.shields.io/badge/Dart-0175C2?style=flat-square&logo=dart&logoColor=white)
-  ![Platform](https://img.shields.io/badge/Platform-Android%20%7C%20iOS-34A853?style=flat-square)
+  ![Platform](https://img.shields.io/badge/Android%20%7C%20iOS-34A853?style=flat-square)
 </div>
 
-**Syncy lets you watch videos with friends in real-time, using any video file on your device.**
+**Watch videos with friends in real-time using any video file on your device.**
+
+---
+
+<div align="center">
+  <img src="landing_website/public/hero_ui.jpg" alt="Syncy UI" width="600"/>
+</div>
 
 ---
 
@@ -21,10 +27,16 @@
 | **📱 Media Discovery** | Automatic device scanning, thumbnail generation, smart search |
 | **⚡ Real-time Sync** | WebSocket-powered playback with sub-second latency |
 | **🎨 Modern UI** | Glassmorphic design, dark theme, gesture navigation |
-| **🔍 Smart Search** | Fuzzy matching handles typos, relevance scoring, multi-term ranking |
+| **🔍 Smart Search** | Fuzzy matching handles typos, relevance scoring |
+
+---
+
+## 🎥 Demo
 
 <div align="center">
-  <img src="landing_website/public/hero_ui.jpg" alt="Syncy UI" width="80%"/>
+  <video src="landing_website/public/example.mp4" width="600" controls>
+    Your browser does not support the video tag.
+  </video>
 </div>
 
 ---
@@ -32,7 +44,6 @@
 ## 🛠️ Quick Start
 
 ```bash
-# Clone and run
 git clone https://github.com/khaled-muhammad/Syncy.git
 cd Syncy
 flutter pub get
@@ -40,80 +51,48 @@ dart run realm generate
 flutter run
 ```
 
-### Requirements
-- Flutter 3.8+
-- Android SDK 21+ / iOS 12+
+**Requirements:** Flutter 3.8+ | Android SDK 21+ | iOS 12+
 
 ---
 
-## 📂 Project Structure
+## 📁 Structure
 
 ```
 lib/
-├── controllers/     # GetX state management
-├── screens/         # UI screens
-├── widgets/         # Reusable components
-├── models/          # Realm database models
-├── services/        # WebSocket, thumbnail generation
-├── utils/           # Helpers, search algorithm
-└── main.dart
+├── controllers/    # GetX state
+├── screens/        # UI
+├── widgets/        # Components
+├── models/         # Realm DB
+├── services/       # WebSocket, thumbnails
+└── utils/          # Search, helpers
 ```
 
 ---
 
-## 🎯 Core Architecture
+## 📊 Status
 
-| Component | Tech | Purpose |
-|-----------|------|---------|
-| State | GetX | Reactive controllers |
-| Local DB | Realm | Fast, embedded database |
-| Sync | WebSocket | Real-time coordination |
-| Search | Custom | Fuzzy matching + scoring |
-| Thumbnails | Isolates | Background processing |
-
----
-
-## 🚦 Current Status
-
-✅ **Working:**
-- Media scanning & metadata extraction
-- Thumbnail generation (isolate-based)
-- Smart search with fuzzy matching
-- Material You theming
-- Basic WebSocket sync
-
-⚠️ **In Progress:**
-- iOS permission handling
-- Large file optimization
-
----
-
-## 📱 Demo
-
-<div align="center">
-  <video src="landing_website/public/example.mp4" width="80%" controls>
-    Your browser does not support the video tag.
-  </video>
-</div>
+✅ Media scanning • Thumbnails • Smart search • WebSocket sync  
+⚠️ iOS permissions • Large file optimization
 
 ---
 
 ## 🤝 Contribute
 
-1. Fork it
-2. Create feature branch: `git checkout -b feature/name`
-3. Commit changes: `git commit -m 'Add feature'`
-4. Push: `git push origin feature/name`
-5. Open a PR
-
----
-
-## 📄 License
-
-MIT © [Khaled Muhammad](https://github.com/khaled-muhammad)
+```bash
+git checkout -b feature/name
+git commit -m 'Add feature'
+git push origin feature/name
+# Open PR
+```
 
 ---
 
 <div align="center">
-  <sub>Built by a 17-year-old developer · ⭐ if you like it!</sub>
+  <sub>
+    <a href="https://synncy.netlify.app/">Website</a> • 
+    <a href="https://github.com/khaled-muhammad/Syncy/issues">Issues</a> • 
+    <a href="https://github.com/khaled-muhammad/Syncy/discussions">Discussions</a>
+  </sub>
+  <br/>
+  <sub>Built by a 17-year-old dev · MIT © Khaled Muhammad</sub>
 </div>
