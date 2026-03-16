@@ -579,7 +579,7 @@ function App() {
           </div>
 
           <div className="text-gray-600 text-xs">
-            © 2024 Syncy. All rights reserved.
+            © 2026 Syncy. All rights reserved.
           </div>
         </div>
       </footer>
