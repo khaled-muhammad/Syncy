@@ -23,7 +23,8 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: "stable"
+          channel: "stable"
+          flutter-version: "3.x"
 
       - name: Flutter Pub Get
         run: flutter pub get
@@ -36,11 +37,26 @@ jobs:
 
       - name: Prepare Artifacts
         run: |
-          mkdir release
-          cp build/app/outputs/flutter-apk/app-release.apk release/app-universal.apk
-          cp build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk release/
-          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk release/
-          cp build/app/outputs/flutter-apk/app-x86_64-release.apk release/
+          mkdir -p release
+          # Check if files exist before copying
+          if [ -f "build/app/outputs/flutter-apk/app-release.apk" ]; then
+            cp build/app/outputs/flutter-apk/app-release.apk release/app-universal.apk
+          fi
+          
+          if [ -f "build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk" ]; then
+            cp build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk release/
+          fi
+          
+          if [ -f "build/app/outputs/flutter-apk/app-arm64-v8a-release.apk" ]; then
+            cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk release/
+          fi
+          
+          if [ -f "build/app/outputs/flutter-apk/app-x86_64-release.apk" ]; then
+            cp build/app/outputs/flutter-apk/app-x86_64-release.apk release/
+          fi
+          
+          # List contents of release directory for debugging
+          ls -la release/
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
