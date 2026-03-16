@@ -3,6 +3,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:syncy/bottomsheets/create_room_bottom_sheet.dart';
 import 'package:syncy/models/media.dart';
 import 'package:syncy/widgets/media_card.dart';
 import 'package:syncy/widgets/modern_input.dart';
@@ -89,13 +90,9 @@ class _SearchScreenState extends State<SearchScreen> {
 
       if (mediaName.split(RegExp(r'\s+')).contains(term)) {
         score += 40.0;
-      }
-
-      else if (mediaName.contains(term)) {
+      } else if (mediaName.contains(term)) {
         score += 20.0;
-      }
-
-      else if (_fuzzyMatch(mediaName, term)) {
+      } else if (_fuzzyMatch(mediaName, term)) {
         score += 10.0;
       }
     }
@@ -294,9 +291,18 @@ class _SearchScreenState extends State<SearchScreen> {
                               final mediaElement = filteredMedia[index];
                               return MediaCard(
                                 mediaElement: mediaElement,
-                                onPressed: widget.onSelect == null? null : () {
-                                  widget.onSelect!(mediaElement);
-                                  Get.back();
+                                onPressed: () {
+                                  if (widget.onSelect != null) {
+                                    widget.onSelect!(mediaElement);
+                                    Get.back();
+                                  } else {
+                                    // Show create room dialog when searching from home
+                                    Get.bottomSheet(
+                                      CreateRoomBottomSheet(
+                                        media: mediaElement,
+                                      ),
+                                    );
+                                  }
                                 },
                               );
                             },

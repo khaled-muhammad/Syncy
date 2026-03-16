@@ -23,8 +23,20 @@ class RoomUser {
 
 class RoomController extends GetxController {
   final isar = Get.find<Isar>();
-  User get user => isar.users.where().findFirstSync() ?? User()
-    ..name = 'Guest';
+
+  User get user {
+    final existingUser = isar.users.where().findFirstSync();
+    if (existingUser != null) {
+      return existingUser;
+    }
+    // Create and save a default user if none exists
+    final newUser = User()..name = 'Guest';
+    isar.writeTxnSync(() {
+      isar.users.putSync(newUser);
+    });
+    return newUser;
+  }
+
   String _uuid = const u.Uuid().v4();
 
   late RxList<RoomUser> users = <RoomUser>[].obs;

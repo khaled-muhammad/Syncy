@@ -100,6 +100,7 @@ class _RoomScreenState extends State<RoomScreen> {
           ),
         ),
         Scaffold(
+          resizeToAvoidBottomInset: true,
           appBar: AppBar(
             title: Text(controller.room.value.name),
             centerTitle: true,
@@ -185,112 +186,138 @@ class _RoomScreenState extends State<RoomScreen> {
                 exitPop();
               }
             },
-            child: Stack(
-              children: [
-                Column(
+            child: Builder(
+              builder: (context) {
+                final keyboardOpen =
+                    MediaQuery.of(context).viewInsets.bottom > 0;
+                return Stack(
                   children: [
-                    controller.videoController != null
-                        ? Container(
-                            constraints: BoxConstraints(
-                              maxHeight:
-                                  MediaQuery.of(context).size.height * 0.4,
-                            ),
-                            alignment: Alignment.center,
-                            child: AspectRatio(
-                              aspectRatio:
-                                  controller.videoController!.value.aspectRatio,
-                              child: Stack(
-                                children: [
-                                  VideoPlayer(controller.videoController!),
-                                  ControlsOverlay(
-                                    controller: controller.videoController!,
-                                    onPlayToggle: (isPlaying) {
-                                      if (isPlaying) {
-                                        controller.playVideo();
-                                      } else {
-                                        controller.pauseVideo();
-                                      }
-                                    },
-                                    onSeek: (position) {
-                                      controller.seekVideo(position);
-                                    },
+                    SingleChildScrollView(
+                      child: Column(
+                        children: [
+                          controller.videoController != null
+                              ? Container(
+                                  constraints: BoxConstraints(
+                                    maxHeight:
+                                        MediaQuery.of(context).size.height *
+                                        0.4,
                                   ),
-                                ],
-                              ),
-                            ),
-                          )
-                        : Center(
-                            child: Container(
-                              decoration: BoxDecoration(
-                                gradient: const LinearGradient(
-                                  colors: [
-                                    Color(0xFF8E2DE2),
-                                    Color(0xFF4A00E0),
-                                  ],
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                ),
-                                borderRadius: BorderRadius.circular(30),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.purple.withValues(alpha: 0.4),
-                                    blurRadius: 20,
-                                    offset: const Offset(0, 10),
-                                  ),
-                                ],
-                              ),
-                              child: ElevatedButton(
-                                onPressed: () {
-                                  Get.to(
-                                    () => SearchScreen(
-                                      media: Get.find<HomeController>().media,
-                                      onSelect: (selectedMedia) {
-                                        controller.setMedia(selectedMedia);
-                                        setupPlayer();
-                                      },
+                                  alignment: Alignment.center,
+                                  child: AspectRatio(
+                                    aspectRatio: controller
+                                        .videoController!
+                                        .value
+                                        .aspectRatio,
+                                    child: Stack(
+                                      children: [
+                                        VideoPlayer(
+                                          controller.videoController!,
+                                        ),
+                                        ControlsOverlay(
+                                          controller:
+                                              controller.videoController!,
+                                          onPlayToggle: (isPlaying) {
+                                            if (isPlaying) {
+                                              controller.playVideo();
+                                            } else {
+                                              controller.pauseVideo();
+                                            }
+                                          },
+                                          onSeek: (position) {
+                                            controller.seekVideo(position);
+                                          },
+                                        ),
+                                      ],
                                     ),
-                                  );
-                                },
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.transparent,
-                                  shadowColor: Colors.transparent,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 32,
-                                    vertical: 18,
                                   ),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(30),
-                                  ),
-                                  textStyle: const TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                    letterSpacing: 1.1,
+                                )
+                              : Center(
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      gradient: const LinearGradient(
+                                        colors: [
+                                          Color(0xFF8E2DE2),
+                                          Color(0xFF4A00E0),
+                                        ],
+                                        begin: Alignment.topLeft,
+                                        end: Alignment.bottomRight,
+                                      ),
+                                      borderRadius: BorderRadius.circular(30),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.purple.withValues(
+                                            alpha: 0.4,
+                                          ),
+                                          blurRadius: 20,
+                                          offset: const Offset(0, 10),
+                                        ),
+                                      ],
+                                    ),
+                                    child: ElevatedButton(
+                                      onPressed: () {
+                                        Get.to(
+                                          () => SearchScreen(
+                                            media: Get.find<HomeController>()
+                                                .media,
+                                            onSelect: (selectedMedia) {
+                                              controller.setMedia(
+                                                selectedMedia,
+                                              );
+                                              setupPlayer();
+                                            },
+                                          ),
+                                        );
+                                      },
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.transparent,
+                                        shadowColor: Colors.transparent,
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 32,
+                                          vertical: 18,
+                                        ),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            30,
+                                          ),
+                                        ),
+                                        textStyle: const TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                          letterSpacing: 1.1,
+                                        ),
+                                      ),
+                                      child: const Text(
+                                        "Choose Media",
+                                        style: TextStyle(color: Colors.white),
+                                      ),
+                                    ),
                                   ),
                                 ),
-                                child: const Text(
-                                  "Choose Media",
-                                  style: TextStyle(color: Colors.white),
-                                ),
-                              ),
+                          // Reaction bar - hidden when keyboard is open
+                          if (!keyboardOpen) ...[
+                            const SizedBox(height: 12),
+                            const ReactionBar(),
+                          ],
+                          const SizedBox(height: 12),
+                          // Chat panel with fixed height
+                          SizedBox(
+                            height: keyboardOpen
+                                ? MediaQuery.of(context).size.height * 0.4
+                                : MediaQuery.of(context).size.height * 0.45,
+                            child: const Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 12),
+                              child: ChatPanel(),
                             ),
                           ),
-                    // Reaction bar
-                    const SizedBox(height: 12),
-                    const ReactionBar(),
-                    const SizedBox(height: 12),
-                    // Chat panel
-                    const Expanded(
-                      child: Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 12),
-                        child: ChatPanel(),
+                          const SizedBox(height: 12),
+                        ],
                       ),
                     ),
-                    const SizedBox(height: 12),
+                    // Floating reactions overlay
+                    const ReactionOverlay(),
                   ],
-                ),
-                // Floating reactions overlay
-                const ReactionOverlay(),
-              ],
+                );
+              },
             ),
           ),
         ),

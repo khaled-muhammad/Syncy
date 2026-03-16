@@ -98,6 +98,11 @@ class WebSocketService extends GetxService {
 
   void _handleStreamError(dynamic error) {
     log('❌ WebSocket stream error: $error');
+    // Log additional error details if available
+    if (error is Exception) {
+      log('❌ Error type: ${error.runtimeType}');
+    }
+    isConnected.value = false;
     _handleConnectionError('Stream error: $error');
   }
 
@@ -370,9 +375,17 @@ class WebSocketService extends GetxService {
   Future<void> _safeDisconnect() async {
     if (_channel != null) {
       try {
-        await _channel!.sink.close(status.goingAway);
+        // Use normalClosure (1000) instead of goingAway (1001)
+        // The web_socket package only allows 1000 or 3000-4999
+        await _channel!.sink.close(status.normalClosure);
       } catch (e) {
         log('⚠️ Error during safe disconnect: $e');
+        // If close fails, try to force close without status code
+        try {
+          await _channel!.sink.close();
+        } catch (e2) {
+          log('⚠️ Error during force close: $e2');
+        }
       }
       _channel = null;
     }

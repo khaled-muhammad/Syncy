@@ -1,0 +1,61 @@
+/* App-specific styles */
+
+/* Ensure smooth scroll behavior for GSAP */
+html.has-scroll-smooth {
+  overflow: hidden;
+}
+
+html.has-scroll-smooth body {
+  overflow: hidden;
+}
+
+/* Pin spacer styling */
+.pin-spacer {
+  background-color: #10091f !important;
+}
+
+/* Ensure sections stack properly */
+.section-pinned {
+  will-change: transform;
+}
+
+/* Phone animation optimization */
+.phone-frame {
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+}
+
+/* Text rendering optimization */
+h1, h2, h3, h4, h5, h6 {
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Button press effect */
+.btn-primary:active,
+.btn-secondary:active {
+  transform: translateY(0) scale(0.98);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .section-pinned {
+    padding: 0 5vw;
+  }
+  
+  .phone-frame {
+    width: 72vw !important;
+  }
+}
+
+/* Reduced motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

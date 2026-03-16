@@ -1,0 +1,50 @@
+name: Flutter APK Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    name: Build & Release APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "17"
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "stable"
+
+      - name: Flutter Pub Get
+        run: flutter pub get
+
+      - name: Build Universal APK
+        run: flutter build apk --release
+
+      - name: Build Split APKs
+        run: flutter build apk --release --split-per-abi
+
+      - name: Prepare Artifacts
+        run: |
+          mkdir release
+          cp build/app/outputs/flutter-apk/app-release.apk release/app-universal.apk
+          cp build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk release/
+          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk release/
+          cp build/app/outputs/flutter-apk/app-x86_64-release.apk release/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
