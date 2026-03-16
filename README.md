@@ -28,6 +28,8 @@
 | **⚡ Real-time Sync** | WebSocket-powered playback with sub-second latency |
 | **🎨 Modern UI** | Glassmorphic design, dark theme, gesture navigation |
 | **🔍 Smart Search** | Fuzzy matching handles typos, relevance scoring |
+| **Chatting** | Allow live chatting in rooms. |
+| **Reacting** | Allow live reacting while watching. |
 
 ---
 
