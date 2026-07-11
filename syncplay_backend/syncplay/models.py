@@ -4,13 +4,16 @@ import uuid
 
 class Room(models.Model):
     """Model representing a SyncPlay room"""
+    ROOM_MODES = [('friends', 'Friends'), ('couple', 'Couple')]
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=100)
+    room_mode = models.CharField(max_length=12, choices=ROOM_MODES, default='friends')
     host_id = models.UUIDField()
     current_video_url = models.URLField(blank=True, null=True)
     current_video_title = models.CharField(max_length=255, blank=True, null=True)
     current_position = models.DurationField(default=timezone.timedelta)
     is_playing = models.BooleanField(default=False)
+    playback_revision = models.PositiveBigIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
@@ -28,11 +31,16 @@ class Room(models.Model):
         return {
             'id': str(self.id),
             'name': self.name,
+            'room_mode': self.room_mode,
             'host_id': str(self.host_id),
             'current_video_url': self.current_video_url,
             'current_video_title': self.current_video_title,
-            'current_position': int(self.current_position.total_seconds()) if self.current_position else 0,
+            'current_position': self.current_position.total_seconds() if self.current_position else 0,
+            'position_ms': round(self.current_position.total_seconds() * 1000) if self.current_position else 0,
             'is_playing': self.is_playing,
+            'playback_revision': self.playback_revision,
+            'playback_updated_at': self.updated_at.isoformat(),
+            'server_time': timezone.now().isoformat(),
             'created_at': self.created_at.isoformat(),
             'users': [user.to_dict() for user in self.users.all()],
         }

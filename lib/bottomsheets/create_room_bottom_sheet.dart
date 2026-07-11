@@ -5,6 +5,7 @@ import 'package:get/get.dart';
 import 'package:isar_community/isar.dart';
 import 'package:syncy/controllers/room_controller.dart';
 import 'package:syncy/models/media.dart';
+import 'package:syncy/models/room.dart';
 import 'package:syncy/models/user.dart';
 import 'package:syncy/widgets/modern_input.dart';
 
@@ -22,6 +23,7 @@ class _CreateRoomBottomSheetState extends State<CreateRoomBottomSheet> {
   final _roomNameController = TextEditingController();
   final isar = Get.find<Isar>();
   late User user;
+  RoomMode _roomMode = RoomMode.friends;
   @override
   void initState() {
     super.initState();
@@ -81,6 +83,35 @@ class _CreateRoomBottomSheetState extends State<CreateRoomBottomSheet> {
                   },
                 ),
                 const SizedBox(height: 20),
+                SegmentedButton<RoomMode>(
+                  segments: const [
+                    ButtonSegment(
+                      value: RoomMode.friends,
+                      icon: Icon(Icons.groups_2_rounded),
+                      label: Text('Friends'),
+                    ),
+                    ButtonSegment(
+                      value: RoomMode.couple,
+                      icon: Icon(Icons.favorite_rounded),
+                      label: Text('Couple'),
+                    ),
+                  ],
+                  selected: {_roomMode},
+                  showSelectedIcon: false,
+                  onSelectionChanged: (selection) {
+                    setState(() => _roomMode = selection.first);
+                  },
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  _roomMode == RoomMode.couple
+                      ? 'A softer space with affectionate reactions'
+                      : 'A lively room with fun group reactions',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: Colors.white70),
+                ),
+                const SizedBox(height: 20),
                 ElevatedButton.icon(
                   onPressed: _roomNameController.text.trim().isEmpty
                       ? null
@@ -88,6 +119,7 @@ class _CreateRoomBottomSheetState extends State<CreateRoomBottomSheet> {
                           Get.find<RoomController>().createRoom(
                             _roomNameController.text.trim(),
                             mediaItem: widget.media,
+                            mode: _roomMode,
                           );
                         },
                   icon: const Icon(Icons.start_rounded, color: Colors.white),

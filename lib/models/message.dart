@@ -1,3 +1,5 @@
+import 'package:uuid/uuid.dart';
+
 enum MessageType {
   join,
   leave,
@@ -12,6 +14,7 @@ enum MessageType {
   heartbeat,
   chat,
   reaction,
+  ack,
 }
 
 class Message {
@@ -20,6 +23,7 @@ class Message {
   final String userId;
   final Map<String, dynamic> data;
   final DateTime timestamp;
+  final String eventId;
 
   Message({
     required this.type,
@@ -27,7 +31,9 @@ class Message {
     required this.userId,
     required this.data,
     DateTime? timestamp,
-  }) : timestamp = timestamp ?? DateTime.now();
+    String? eventId,
+  }) : timestamp = timestamp ?? DateTime.now(),
+       eventId = eventId ?? const Uuid().v4();
 
   Map<String, dynamic> toJson() {
     return {
@@ -36,6 +42,7 @@ class Message {
       'userId': userId,
       'data': data,
       'timestamp': timestamp.toIso8601String(),
+      'eventId': eventId,
     };
   }
 
@@ -85,6 +92,7 @@ class Message {
       userId: userId,
       data: json['data'] ?? {},
       timestamp: timestamp,
+      eventId: json['eventId'] ?? json['event_id'],
     );
   }
 
@@ -97,7 +105,7 @@ class Message {
       type: MessageType.play,
       roomId: roomId,
       userId: userId,
-      data: {'position': position.inSeconds},
+      data: {'positionMs': position.inMilliseconds},
     );
   }
 
@@ -110,7 +118,7 @@ class Message {
       type: MessageType.pause,
       roomId: roomId,
       userId: userId,
-      data: {'position': position.inSeconds},
+      data: {'positionMs': position.inMilliseconds},
     );
   }
 
@@ -123,14 +131,14 @@ class Message {
       type: MessageType.seek,
       roomId: roomId,
       userId: userId,
-      data: {'position': position.inSeconds},
+      data: {'positionMs': position.inMilliseconds},
     );
   }
 
   factory Message.videoChanged({
     required String roomId,
     required String userId,
-    required String videoUrl,
+    String videoUrl = '',
     required String videoTitle,
   }) {
     return Message(

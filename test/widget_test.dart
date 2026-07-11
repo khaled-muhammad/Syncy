@@ -5,26 +5,36 @@
 // gestures. You can also use WidgetTester to find child widgets in the widget
 // tree, read text, and verify that the values of widget properties are correct.
 
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
-import 'package:syncy/main.dart';
+import 'package:syncy/models/room.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  test('room snapshots prefer precise millisecond positions', () {
+    final room = Room.fromJson({
+      'id': 'room',
+      'name': 'Movie night',
+      'host_id': 'host',
+      'position_ms': 9876,
+      'current_position': 9,
+      'is_playing': true,
+      'created_at': '2026-01-01T00:00:00Z',
+    });
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    expect(room.currentPosition, const Duration(milliseconds: 9876));
+    expect(room.isPlaying, isTrue);
+  });
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+  test('room snapshots preserve the selected room mode', () {
+    final room = Room.fromJson({
+      'id': 'room',
+      'name': 'Date night',
+      'host_id': 'host',
+      'room_mode': 'couple',
+      'position_ms': 0,
+      'is_playing': false,
+      'created_at': '2026-01-01T00:00:00Z',
+    });
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    expect(room.mode, RoomMode.couple);
   });
 }

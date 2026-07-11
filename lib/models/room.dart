@@ -1,7 +1,10 @@
+enum RoomMode { friends, couple }
+
 class Room {
   String id;
   String name;
   String hostId;
+  RoomMode mode;
   // final List<User> users;
   String? currentVideoUrl;
   String? currentVideoTitle;
@@ -13,6 +16,7 @@ class Room {
     required this.id,
     required this.name,
     required this.hostId,
+    this.mode = RoomMode.friends,
     // required this.users,
     this.currentVideoUrl,
     this.currentVideoTitle,
@@ -25,6 +29,7 @@ class Room {
     String? id,
     String? name,
     String? hostId,
+    RoomMode? mode,
     // List<User>? users,
     String? currentVideoUrl,
     String? currentVideoTitle,
@@ -36,6 +41,7 @@ class Room {
       id: id ?? this.id,
       name: name ?? this.name,
       hostId: hostId ?? this.hostId,
+      mode: mode ?? this.mode,
       // users: users ?? this.users,
       currentVideoUrl: currentVideoUrl ?? this.currentVideoUrl,
       currentVideoTitle: currentVideoTitle ?? this.currentVideoTitle,
@@ -50,6 +56,7 @@ class Room {
       'id': id,
       'name': name,
       'hostId': hostId,
+      'roomMode': mode.name,
       // 'users': users.map((user) => user.toJson()).toList(),
       'currentVideoUrl': currentVideoUrl,
       'currentVideoTitle': currentVideoTitle,
@@ -64,15 +71,25 @@ class Room {
       id: json['id'],
       name: json['name'],
       hostId: json['host_id'],
+      mode: RoomMode.values.firstWhere(
+        (mode) => mode.name == (json['room_mode'] ?? 'friends'),
+        orElse: () => RoomMode.friends,
+      ),
       // users: (json['users'] as List)
       //     .map((userJson) => User.fromJson(userJson))
       //     .toList(),
       currentVideoUrl: json['current_video_url'],
       currentVideoTitle: json['current_video_title'],
       currentPosition: Duration(
-        seconds: json['current_position'] is int
-            ? json['current_position']
-            : int.tryParse(json['current_position']?.toString() ?? '0') ?? 0,
+        milliseconds:
+            (json['position_ms'] as num?)?.round() ??
+            (((json['current_position'] as num?) ??
+                        num.tryParse(
+                          json['current_position']?.toString() ?? '0',
+                        ) ??
+                        0) *
+                    1000)
+                .round(),
       ),
       isPlaying: json['is_playing'] ?? false,
       createdAt: DateTime.parse(json['created_at']),
