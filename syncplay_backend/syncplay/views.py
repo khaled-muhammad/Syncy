@@ -38,7 +38,8 @@ def create_room(request):
             id=room.host_id,
             room=room,
             name=user_name,
-            is_host=True
+            is_host=True,
+            is_online=False
         )
         
         logger.info(f"Room '{room_name}' created by {user_name}")

@@ -72,7 +72,10 @@ class ReliableSyncPlayConsumer(AsyncWebsocketConsumer):
 
     async def handle_join(self, data):
         payload = data.get('data') or {}
-        name = payload.get('userName') or payload.get('name')
+        # Normalise the name the same way the HTTP join/create serializers do
+        # (they .strip()), otherwise a trailing/leading space makes the stored
+        # membership name and the socket name mismatch and the join never binds.
+        name = (payload.get('userName') or payload.get('name') or '').strip()
         user_id = data.get('userId') or payload.get('id')
         if not name or not user_id:
             await self.send_error('Missing user name or user ID')
@@ -268,9 +271,10 @@ class ReliableSyncPlayConsumer(AsyncWebsocketConsumer):
         except (Room.DoesNotExist, ValueError):
             return None, None
         except User.DoesNotExist:
-            # Compatibility for clients released before the join endpoint
-            # returned its reserved user ID.
-            reserved = User.objects.filter(room=room, name=name, is_online=False).first()
+            # Durable membership: adopt the existing (room, name) identity even if
+            # the client sent a legacy/self-generated user id, or the row is still
+            # marked online from a previous socket that did not disconnect cleanly.
+            reserved = User.objects.filter(room=room, name=name).first()
             if reserved is None:
                 return None, None
             was_host = reserved.is_host
