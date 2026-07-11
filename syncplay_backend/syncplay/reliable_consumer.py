@@ -72,7 +72,10 @@ class ReliableSyncPlayConsumer(AsyncWebsocketConsumer):
 
     async def handle_join(self, data):
         payload = data.get('data') or {}
-        name = payload.get('userName') or payload.get('name')
+        # Normalise the name the same way the HTTP join/create serializers do
+        # (they .strip()), otherwise a trailing/leading space makes the stored
+        # membership name and the socket name mismatch and the join never binds.
+        name = (payload.get('userName') or payload.get('name') or '').strip()
         user_id = data.get('userId') or payload.get('id')
         if not name or not user_id:
             await self.send_error('Missing user name or user ID')
