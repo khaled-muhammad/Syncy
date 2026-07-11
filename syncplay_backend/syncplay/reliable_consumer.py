@@ -268,9 +268,10 @@ class ReliableSyncPlayConsumer(AsyncWebsocketConsumer):
         except (Room.DoesNotExist, ValueError):
             return None, None
         except User.DoesNotExist:
-            # Compatibility for clients released before the join endpoint
-            # returned its reserved user ID.
-            reserved = User.objects.filter(room=room, name=name, is_online=False).first()
+            # Durable membership: adopt the existing (room, name) identity even if
+            # the client sent a legacy/self-generated user id, or the row is still
+            # marked online from a previous socket that did not disconnect cleanly.
+            reserved = User.objects.filter(room=room, name=name).first()
             if reserved is None:
                 return None, None
             was_host = reserved.is_host
