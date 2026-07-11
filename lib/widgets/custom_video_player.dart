@@ -7,6 +7,7 @@ import 'package:get/get.dart';
 import 'package:icons_plus/icons_plus.dart';
 import 'package:video_player/video_player.dart';
 import 'package:syncy/controllers/room_controller.dart';
+import 'package:syncy/widgets/reliable_reaction_overlay.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 // Add subtitle model
@@ -879,10 +880,10 @@ class _FullScreenVideoPageState extends State<_FullScreenVideoPage> {
     // Restore system UI and orientation
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
-    
+
     // Disable wake lock when exiting fullscreen
     WakelockPlus.disable();
-    
+
     super.dispose();
   }
 
@@ -912,6 +913,9 @@ class _FullScreenVideoPageState extends State<_FullScreenVideoPage> {
                           onPlayToggle: widget.onPlayToggle,
                           onSeek: widget.onSeek,
                         ),
+                        const Positioned.fill(
+                          child: ReactionOverlay(bottomInset: 88),
+                        ),
                       ],
                     ),
                   ),
@@ -926,6 +930,9 @@ class _FullScreenVideoPageState extends State<_FullScreenVideoPage> {
                       controller: widget.controller,
                       onPlayToggle: widget.onPlayToggle,
                       onSeek: widget.onSeek,
+                    ),
+                    const Positioned.fill(
+                      child: ReactionOverlay(bottomInset: 88),
                     ),
                   ],
                 ),

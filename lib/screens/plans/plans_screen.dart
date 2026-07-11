@@ -1,11 +1,10 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:flutter_blurhash/flutter_blurhash.dart';
 import 'package:get/get.dart';
 import 'package:icons_plus/icons_plus.dart';
 import 'package:syncy/controllers/plans_controller.dart';
 import 'package:syncy/models/subscription_plan.dart';
 import 'package:syncy/widgets/custom_button.dart';
+import 'package:syncy/widgets/native_purple_mesh_background.dart';
 
 class PlansScreen extends StatelessWidget {
   const PlansScreen({super.key});
@@ -14,61 +13,56 @@ class PlansScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final PlansController controller = Get.find<PlansController>();
 
-    return Stack(
-      children: [
-        // Background with blur effect
-        const Opacity(
-          opacity: 0.3,
-          child: BlurHash(
-            hash: "^2701,bB6rW-Sbj[SpW,sHa{WmjuW~W,sHj[a#fQwmWlfOo4Wma}R~f9o3jujwfPn:aya^fRa_fOSZfSn.fPfRfOssa_Wnjua^a|W*jvjsfRa#",
-          ),
-        ),
-        Scaffold(
-          backgroundColor: Colors.transparent,
-          appBar: AppBar(
-            title: const Text(
-              'Choose Your Plan',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                letterSpacing: 0.5,
+    return NativePurpleMeshBackground(
+      child: Stack(
+        children: [
+          Scaffold(
+            backgroundColor: Colors.transparent,
+            appBar: AppBar(
+              title: const Text(
+                'Choose Your Plan',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 0.5,
+                ),
+              ),
+              centerTitle: true,
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back_rounded),
+                onPressed: () => Get.back(),
               ),
             ),
-            centerTitle: true,
-            backgroundColor: Colors.transparent,
-            elevation: 0,
-            leading: IconButton(
-              icon: const Icon(Icons.arrow_back_rounded),
-              onPressed: () => Get.back(),
+            body: SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  // Header section
+                  _buildHeader(context),
+                  const SizedBox(height: 24),
+
+                  // Billing toggle
+                  _buildBillingToggle(controller),
+                  const SizedBox(height: 32),
+
+                  // Plans grid
+                  _buildPlansGrid(controller),
+                  const SizedBox(height: 24),
+
+                  // Features comparison
+                  _buildFeaturesComparison(controller),
+                  const SizedBox(height: 32),
+
+                  // FAQ or additional info
+                  _buildAdditionalInfo(),
+                  const SizedBox(height: 80), // Bottom padding
+                ],
+              ),
             ),
           ),
-          body: SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              children: [
-                // Header section
-                _buildHeader(context),
-                const SizedBox(height: 24),
-                
-                // Billing toggle
-                _buildBillingToggle(controller),
-                const SizedBox(height: 32),
-                
-                // Plans grid
-                _buildPlansGrid(controller),
-                const SizedBox(height: 24),
-                
-                // Features comparison
-                _buildFeaturesComparison(controller),
-                const SizedBox(height: 32),
-                
-                // FAQ or additional info
-                _buildAdditionalInfo(),
-                const SizedBox(height: 80), // Bottom padding
-              ],
-            ),
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -92,11 +86,7 @@ class PlansScreen extends StatelessWidget {
       ),
       child: Column(
         children: [
-          Icon(
-            Iconsax.crown_1_bold,
-            size: 48,
-            color: Colors.amber,
-          ),
+          Icon(Iconsax.crown_1_bold, size: 48, color: Colors.amber),
           const SizedBox(height: 16),
           const Text(
             'Unlock the Full Syncy Experience',
@@ -174,7 +164,9 @@ class PlansScreen extends StatelessWidget {
         child: Text(
           text,
           style: TextStyle(
-            color: isSelected ? Colors.white : Colors.white.withValues(alpha: 0.7),
+            color: isSelected
+                ? Colors.white
+                : Colors.white.withValues(alpha: 0.7),
             fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
           ),
         ),
@@ -186,10 +178,12 @@ class PlansScreen extends StatelessWidget {
     return Obx(
       () => Column(
         children: controller.allPlans
-            .map((plan) => Padding(
-                  padding: const EdgeInsets.only(bottom: 16),
-                  child: _buildPlanCard(plan, controller),
-                ))
+            .map(
+              (plan) => Padding(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: _buildPlanCard(plan, controller),
+              ),
+            )
             .toList(),
       ),
     );
@@ -211,7 +205,10 @@ class PlansScreen extends StatelessWidget {
               right: 0,
               child: Center(
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     gradient: const LinearGradient(
                       colors: [Color(0xFFFFD700), Color(0xFFFF8C00)],
@@ -260,7 +257,9 @@ class PlansScreen extends StatelessWidget {
               boxShadow: [
                 if (plan.isPopular)
                   BoxShadow(
-                    color: _hexToColor(plan.gradientStartColor).withValues(alpha: 0.3),
+                    color: _hexToColor(
+                      plan.gradientStartColor,
+                    ).withValues(alpha: 0.3),
                     blurRadius: 20,
                     offset: const Offset(0, 8),
                   ),
@@ -296,7 +295,10 @@ class PlansScreen extends StatelessWidget {
                     ),
                     if (isCurrentPlan)
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
                         decoration: BoxDecoration(
                           color: Colors.green.withValues(alpha: 0.3),
                           borderRadius: BorderRadius.circular(16),
@@ -318,7 +320,7 @@ class PlansScreen extends StatelessWidget {
                 // Price
                 Obx(() {
                   final billing = controller.getBillingPeriod();
-                  
+
                   return Row(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
@@ -355,7 +357,8 @@ class PlansScreen extends StatelessWidget {
                 // Yearly savings
                 if (plan.monthlyPrice > 0)
                   Obx(() {
-                    if (controller.isYearlyBilling.value && plan.yearlySavings.isNotEmpty) {
+                    if (controller.isYearlyBilling.value &&
+                        plan.yearlySavings.isNotEmpty) {
                       return Padding(
                         padding: const EdgeInsets.only(top: 4),
                         child: Text(
@@ -374,33 +377,41 @@ class PlansScreen extends StatelessWidget {
                 const SizedBox(height: 24),
 
                 // Features
-                ...plan.features.take(6).map((feature) => Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Row(
-                        children: [
-                          Icon(
-                            feature.included ? Icons.check_circle : Icons.cancel,
-                            size: 16,
-                            color: feature.included ? Colors.green : Colors.red,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              feature.title,
-                              style: TextStyle(
-                                color: feature.highlighted
-                                    ? Colors.white
-                                    : Colors.white.withValues(alpha: 0.8),
-                                fontWeight: feature.highlighted
-                                    ? FontWeight.bold
-                                    : FontWeight.normal,
-                                fontSize: 14,
+                ...plan.features
+                    .take(6)
+                    .map(
+                      (feature) => Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Row(
+                          children: [
+                            Icon(
+                              feature.included
+                                  ? Icons.check_circle
+                                  : Icons.cancel,
+                              size: 16,
+                              color: feature.included
+                                  ? Colors.green
+                                  : Colors.red,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                feature.title,
+                                style: TextStyle(
+                                  color: feature.highlighted
+                                      ? Colors.white
+                                      : Colors.white.withValues(alpha: 0.8),
+                                  fontWeight: feature.highlighted
+                                      ? FontWeight.bold
+                                      : FontWeight.normal,
+                                  fontSize: 14,
+                                ),
                               ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    )),
+                    ),
 
                 if (plan.features.length > 6)
                   Padding(
@@ -418,31 +429,33 @@ class PlansScreen extends StatelessWidget {
                 const SizedBox(height: 24),
 
                 // Action button
-                Obx(() => SizedBox(
-                      width: double.infinity,
-                      child: CustomButton(
-                        text: isCurrentPlan
-                            ? 'Current Plan'
-                            : canUpgrade
-                                ? 'Upgrade to ${plan.name}'
-                                : plan.monthlyPrice == 0
-                                    ? 'Downgrade to Free'
-                                    : 'Select ${plan.name}',
-                        onPressed: isCurrentPlan || controller.isUpgrading.value
-                            ? null
-                            : () => _handlePlanSelection(plan, controller),
-                        gradient: isCurrentPlan
-                            ? null
-                            : LinearGradient(
-                                colors: [
-                                  _hexToColor(plan.gradientStartColor),
-                                  _hexToColor(plan.gradientEndColor),
-                                ],
-                              ),
-                        isLoading: controller.isUpgrading.value,
-                        backgroundColor: isCurrentPlan ? Colors.grey : null,
-                      ),
-                    )),
+                Obx(
+                  () => SizedBox(
+                    width: double.infinity,
+                    child: CustomButton(
+                      text: isCurrentPlan
+                          ? 'Current Plan'
+                          : canUpgrade
+                          ? 'Upgrade to ${plan.name}'
+                          : plan.monthlyPrice == 0
+                          ? 'Downgrade to Free'
+                          : 'Select ${plan.name}',
+                      onPressed: isCurrentPlan || controller.isUpgrading.value
+                          ? null
+                          : () => _handlePlanSelection(plan, controller),
+                      gradient: isCurrentPlan
+                          ? null
+                          : LinearGradient(
+                              colors: [
+                                _hexToColor(plan.gradientStartColor),
+                                _hexToColor(plan.gradientEndColor),
+                              ],
+                            ),
+                      isLoading: controller.isUpgrading.value,
+                      backgroundColor: isCurrentPlan ? Colors.grey : null,
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
@@ -457,9 +470,7 @@ class PlansScreen extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.1),
-        ),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -475,8 +486,16 @@ class PlansScreen extends StatelessWidget {
           const SizedBox(height: 16),
           _buildComparisonRow('Max Rooms', ['2', '10', 'Unlimited']),
           _buildComparisonRow('Users per Room', ['4', '25', '100']),
-          _buildComparisonRow('Session Duration', ['1 hour', 'Unlimited', 'Unlimited']),
-          _buildComparisonRow('Sync Quality', ['Standard HD', 'Full HD', '4K Ultra HD']),
+          _buildComparisonRow('Session Duration', [
+            '1 hour',
+            'Unlimited',
+            'Unlimited',
+          ]),
+          _buildComparisonRow('Sync Quality', [
+            'Standard HD',
+            'Full HD',
+            '4K Ultra HD',
+          ]),
           _buildComparisonRow('Priority Support', ['❌', '✅', '✅']),
           _buildComparisonRow('Screen Sharing', ['❌', '❌', '✅']),
           _buildComparisonRow('Custom Branding', ['❌', '❌', '✅']),
@@ -500,17 +519,19 @@ class PlansScreen extends StatelessWidget {
               ),
             ),
           ),
-          ...values.map((value) => Expanded(
-                child: Text(
-                  value,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                  ),
+          ...values.map(
+            (value) => Expanded(
+              child: Text(
+                value,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
                 ),
-              )),
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -529,9 +550,7 @@ class PlansScreen extends StatelessWidget {
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.2),
-        ),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -614,18 +633,13 @@ class PlansScreen extends StatelessWidget {
           style: TextStyle(color: Colors.white70),
         ),
         actions: [
-          TextButton(
-            onPressed: () => Get.back(),
-            child: const Text('Cancel'),
-          ),
+          TextButton(onPressed: () => Get.back(), child: const Text('Cancel')),
           ElevatedButton(
             onPressed: () {
               Get.back();
               controller.cancelSubscription();
             },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.orange,
-            ),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
             child: const Text('Confirm Downgrade'),
           ),
         ],
