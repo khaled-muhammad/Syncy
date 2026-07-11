@@ -4,18 +4,22 @@ import 'package:permission_handler/permission_handler.dart';
 
 class StorageHelper {
   static Future<bool> checkStoragePermission() async {
-    var status = await Permission.storage.status;
-    await Permission.photos.request();
-    await Permission.videos.request();
-    await Permission.mediaLibrary.request();
-    await Permission.audio.request();
-    if (status.isGranted) {
-      return true;
-    } else {
-      var result = await Permission.storage.request();
-      return result.isGranted;
+    if (Platform.isAndroid) {
+      final videoPermission = await Permission.videos.request();
+      if (videoPermission.isGranted || videoPermission.isLimited) return true;
+
+      // Android 12 and older expose media through the legacy storage
+      // permission instead of READ_MEDIA_VIDEO.
+      final storagePermission = await Permission.storage.request();
+      return storagePermission.isGranted;
     }
 
+    if (Platform.isIOS) {
+      final mediaPermission = await Permission.mediaLibrary.request();
+      return mediaPermission.isGranted || mediaPermission.isLimited;
+    }
+
+    return true;
   }
 
   static Future<bool> checkManageExternalStoragePermission() async {
@@ -93,6 +97,4 @@ class StorageHelper {
       return false;
     }
   }
-
-  
 }

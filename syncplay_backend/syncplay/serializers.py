@@ -11,19 +11,28 @@ class UserSerializer(serializers.ModelSerializer):
 class RoomSerializer(serializers.ModelSerializer):
     users = UserSerializer(many=True, read_only=True)
     user_count = serializers.ReadOnlyField()
+    position_ms = serializers.SerializerMethodField()
+    playback_updated_at = serializers.DateTimeField(source='updated_at', read_only=True)
     
     class Meta:
         model = Room
         fields = [
-            'id', 'name', 'host_id', 'current_video_url', 
-            'current_video_title', 'current_position', 
-            'is_playing', 'created_at', 'users', 'user_count'
+            'id', 'name', 'room_mode', 'host_id', 'current_video_url',
+            'current_video_title', 'current_position', 'position_ms',
+            'is_playing', 'playback_revision', 'playback_updated_at',
+            'created_at', 'users', 'user_count'
         ]
         read_only_fields = ['id', 'created_at']
+
+    def get_position_ms(self, room):
+        return round(room.current_position.total_seconds() * 1000)
 
 class CreateRoomSerializer(serializers.Serializer):
     room_name = serializers.CharField(max_length=100)
     user_name = serializers.CharField(max_length=50)
+    room_mode = serializers.ChoiceField(
+        choices=['friends', 'couple'], default='friends'
+    )
     
     def validate_room_name(self, value):
         if len(value.strip()) < 3:
@@ -69,4 +78,4 @@ class RoomStatusSerializer(serializers.Serializer):
     room = RoomSerializer()
     user = UserSerializer()
     is_host = serializers.BooleanField()
-    message = serializers.CharField() 
+    message = serializers.CharField()

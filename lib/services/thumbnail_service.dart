@@ -91,6 +91,14 @@ class ThumbnailService extends GetxService {
 
   Future<String?> requestThumbnail(String videoPath) async {
     try {
+      final queuedRequest = _requestQueue.firstWhereOrNull(
+        (request) =>
+            request.videoPath == videoPath &&
+            (request.status == ThumbnailRequestStatus.pending ||
+                request.status == ThumbnailRequestStatus.processing),
+      );
+      if (queuedRequest != null) return queuedRequest.outputPath;
+
       final videoFile = File(videoPath);
       if (!await videoFile.exists()) {
         print('Video file does not exist: $videoPath');

@@ -1,23 +1,39 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 
-const List<String> imageExtensions = [
-  'jpg',
-  'jpeg',
-  'png',
-  'webp',
-  'tiff',
-];
+const List<String> imageExtensions = ['jpg', 'jpeg', 'png', 'webp', 'tiff'];
 
+/// Video containers that Syncy can discover on-device.
+///
+/// Actual playback still depends on the codecs available on the device. Keep
+/// these values lowercase because discovery normalizes file extensions.
 const List<String> videoExtensions = [
   'mp4',
+  'm4v',
   'mov',
+  'qt',
   'webm',
   'mkv',
-  'avi'
+  'avi',
+  '3gp',
+  '3g2',
+  'ts',
+  'mts',
+  'm2ts',
+  'mpg',
+  'mpeg',
+  'mpe',
+  'vob',
+  'ogv',
+  'flv',
+  'f4v',
+  'wmv',
+  'asf',
+  'rm',
+  'rmvb',
 ];
 
-final List<String> mediaExtensions = imageExtensions+videoExtensions;
+final List<String> mediaExtensions = imageExtensions + videoExtensions;
 
 class AppConstants {
   // API URLs

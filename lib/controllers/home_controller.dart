@@ -1,28 +1,42 @@
 import 'dart:io';
 
+import 'package:flutter/widgets.dart';
 import 'package:get/get.dart';
 import 'package:isar_community/isar.dart';
-import 'package:syncy/constants/app_constants.dart';
 import 'package:syncy/models/media.dart';
+import 'package:syncy/services/media_discovery_service.dart';
 import 'package:syncy/services/thumbnail_service.dart';
 import 'package:syncy/utils/files.dart';
 import 'package:syncy/utils/storage_helper.dart';
 
-class HomeController extends GetxController {
+class HomeController extends GetxController with WidgetsBindingObserver {
   final media = <Media>[].obs;
   final isLoading = true.obs;
+  final isSyncing = true.obs;
+  final syncStatusMessage = 'Checking for new media…'.obs;
+  final newMediaCount = 0.obs;
   final currentDirectory = ''.obs;
   final hasPermission = false.obs;
   final isar = Get.find<Isar>();
   final thumbnailService = Get.find<ThumbnailService>();
+  final MediaDiscoveryService _mediaDiscovery = MediaDiscoveryService();
+
+  bool _scanInProgress = false;
 
   final activeIndex = 1.obs;
 
   @override
   void onInit() {
     super.onInit();
+    WidgetsBinding.instance.addObserver(this);
+    _loadCachedMedia();
     checkPermissions();
     _setupThumbnailCallbacks();
+  }
+
+  void _loadCachedMedia() {
+    media.value = isar.medias.where().findAllSync();
+    isLoading.value = media.isEmpty;
   }
 
   void _setupThumbnailCallbacks() {
@@ -35,7 +49,7 @@ class HomeController extends GetxController {
     });
 
     thumbnailService.onThumbnailFailed((videoPath, error) {
-      print('Thumbnail generation failed for $videoPath: $error');
+      // A missing preview must not interrupt media discovery or playback.
     });
   }
 
@@ -47,8 +61,10 @@ class HomeController extends GetxController {
     hasPermission.value = hasStoragePermission || hasManagePermission;
 
     if (hasPermission.value) {
-      loadMediaFiles();
+      await loadMediaFiles();
     } else {
+      isLoading.value = false;
+      isSyncing.value = false;
       Get.snackbar(
         'Permission Required',
         'Storage permission is required to access media files',
@@ -59,121 +75,101 @@ class HomeController extends GetxController {
   }
 
   Future<void> loadMediaFiles() async {
-    isLoading.value = true;
-    media.clear();
-    print("ISAR");
-    media.value = isar.medias.where().findAllSync();
+    if (_scanInProgress) return;
+
+    _scanInProgress = true;
+    final startedAt = DateTime.now();
+    isLoading.value = media.isEmpty;
+    isSyncing.value = true;
+    newMediaCount.value = 0;
+    syncStatusMessage.value = 'Checking for new media…';
+
     try {
       final localStoragePath = await localStorageDir();
-      print('Local storage path: $localStoragePath');
       currentDirectory.value = localStoragePath;
 
       if (localStoragePath.isEmpty) {
-        print('Local storage path is empty');
-        isLoading.value = false;
-        return;
+        throw const FileSystemException('Media storage is unavailable');
       }
 
-      final directory = Directory(localStoragePath);
-      if (!await directory.exists()) {
-        print('Directory does not exist: $localStoragePath');
-        isLoading.value = false;
-        return;
-      }
+      final mediaFiles = await _mediaDiscovery.discoverVideoPaths(
+        localStoragePath,
+      );
+      final existingPaths = isar.medias
+          .where()
+          .findAllSync()
+          .map((item) => item.path)
+          .toSet();
+      final newVideoPaths = mediaFiles
+          .where((path) => !existingPaths.contains(path))
+          .toList(growable: false);
 
-      final List<String> mediaFiles = [];
+      newMediaCount.value = newVideoPaths.length;
+      if (newVideoPaths.isNotEmpty) {
+        syncStatusMessage.value = newVideoPaths.length == 1
+            ? 'Adding 1 new video…'
+            : 'Adding ${newVideoPaths.length} new videos…';
 
-      await _scanDirectory(directory, mediaFiles);
+        final newRecords = newVideoPaths
+            .map((path) {
+              return Media()
+                ..path = path
+                ..name = _fileName(path)
+                ..thumbnailPath = '';
+            })
+            .toList(growable: false);
 
-      final List<String> newVideoPaths = [];
-      for (String path in mediaFiles) {
-        final existingMedia = isar.medias
-            .filter()
-            .pathEqualTo(path)
-            .findFirstSync();
-        if (existingMedia == null) {
-          final fileName = path.split('/').last;
-          final newMedia = Media()
-            ..path = path
-            ..name = fileName
-            ..thumbnailPath = '';
-          isar.writeTxnSync(() {
-            isar.medias.putSync(newMedia);
-          });
-          newVideoPaths.add(path);
-          print("Created new media record for: $path");
-        }
+        // A single transaction is dramatically faster than opening a database
+        // transaction for every discovered file.
+        isar.writeTxnSync(() => isar.medias.putAllSync(newRecords));
+        media.value = isar.medias.where().findAllSync();
       }
 
       if (newVideoPaths.isNotEmpty) {
-        print('Requesting thumbnails for ${newVideoPaths.length} new videos');
         await thumbnailService.requestMultipleThumbnails(newVideoPaths);
       }
 
       await thumbnailService.generateMissingThumbnails();
-
-      media.value = isar.medias.where().findAllSync();
-      print('Found ${media.length} media files');
+      syncStatusMessage.value = newVideoPaths.isEmpty
+          ? 'Media is up to date'
+          : newVideoPaths.length == 1
+          ? '1 new video added'
+          : '${newVideoPaths.length} new videos added';
     } catch (e) {
-      print('Error loading media files: $e');
+      syncStatusMessage.value = 'Couldn’t finish media sync';
       Get.snackbar(
-        'Error',
-        'Failed to load media files: $e',
+        'Media sync paused',
+        'Your saved library is still available. Pull to refresh and try again.',
         snackPosition: SnackPosition.BOTTOM,
         duration: const Duration(seconds: 3),
       );
     } finally {
-      isLoading.value = false;
-    }
-  }
-
-  Future<void> _scanDirectory(
-    Directory directory,
-    List<String> mediaFiles,
-  ) async {
-    try {
-      await for (final entity in directory.list()) {
-        try {
-          if (entity is Directory) {
-            if (_shouldSkipDirectory(entity.path)) {
-              print('Skipping protected directory: ${entity.path}');
-              continue;
-            }
-            await _scanDirectory(entity, mediaFiles);
-          } else if (entity is File) {
-            final extension = entity.path.split('.').last.toLowerCase();
-            if (videoExtensions.contains(extension)) {
-              print('Found media file: ${entity.path}');
-              mediaFiles.add(entity.path);
-            }
-          }
-        } catch (e) {
-          print('Skipping entity due to error: ${entity.path} - $e');
-        }
+      // Keep very fast MediaStore checks visible long enough to be understood,
+      // without delaying access to the cached library.
+      final elapsed = DateTime.now().difference(startedAt);
+      const minimumVisibleTime = Duration(milliseconds: 700);
+      if (elapsed < minimumVisibleTime) {
+        await Future<void>.delayed(minimumVisibleTime - elapsed);
       }
-    } catch (e) {
-      print(
-        'Skipping directory due to permission error: ${directory.path} - $e',
-      );
+      isLoading.value = false;
+      isSyncing.value = false;
+      _scanInProgress = false;
     }
   }
 
-  bool _shouldSkipDirectory(String path) {
-    final List<String> skipDirs = [
-      'Android/data',
-      'Android/obb',
-      'Android/media',
-      '.android',
-      '.thumbnails',
-      '.cache',
-      '.tmp',
-    ];
-
-    return skipDirs.any((dir) => path.contains(dir));
+  String _fileName(String path) {
+    return path.replaceAll('\\', '/').split('/').last;
   }
 
   Future<void> refreshMediaFiles() async {
     await loadMediaFiles();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && hasPermission.value) {
+      loadMediaFiles();
+    }
   }
 
   Future<void> generateThumbnails() async {
@@ -186,6 +182,7 @@ class HomeController extends GetxController {
 
   @override
   void onClose() {
+    WidgetsBinding.instance.removeObserver(this);
     super.onClose();
   }
 }

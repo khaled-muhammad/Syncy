@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:syncy/models/message.dart';
@@ -9,7 +11,7 @@ import 'package:syncy/models/media.dart';
 import 'package:syncy/models/room.dart';
 import 'package:syncy/models/user.dart';
 import 'package:syncy/routes/app_routes.dart';
-import 'package:syncy/services/websocket_service.dart';
+import 'package:syncy/services/reliable_websocket_service.dart';
 import 'package:video_player/video_player.dart';
 import 'package:file_picker/file_picker.dart';
 
@@ -57,9 +59,19 @@ class RoomController extends GetxController {
     createdAt: DateTime.now(),
   ).obs;
 
-  WebSocketService wsService = WebSocketService();
+  ReliableWebSocketService wsService = ReliableWebSocketService();
 
   VideoPlayerController? videoController;
+  int _lastPlaybackRevision = -1;
+  Map<String, dynamic>? _pendingPlaybackState;
+  final RxBool isMediaLoading = false.obs;
+  final RxBool isApplyingSync = false.obs;
+  final RxString mediaLoadMessage = 'Preparing media…'.obs;
+  final RxnString mediaLoadError = RxnString();
+  final RxString syncStatus = 'Connecting…'.obs;
+  final RxBool requiresMediaSelection = false.obs;
+
+  String get currentUserId => _uuid;
 
   // Add subtitle path storage
   Rx<String?> currentSubtitlePath = Rx<String?>(null);
@@ -74,20 +86,26 @@ class RoomController extends GetxController {
   void onInit() {
     super.onInit();
 
+    wsService.setConnectionCallbacks(
+      onConnected: () => syncStatus.value = 'Synced',
+      onDisconnected: () => syncStatus.value = 'Reconnecting…',
+      onError: (_) {
+        if (!wsService.isJoined.value) syncStatus.value = 'Reconnecting…';
+      },
+    );
+
     wsService.setReceiveMsgFunction((msg) {
-      if (msg.type == MessageType.pause) {
-        videoController?.pause();
-        videoController?.seekTo(Duration(seconds: msg.data['position']));
-      } else if (msg.type == MessageType.play) {
-        videoController?.seekTo(Duration(seconds: msg.data['position']));
-        videoController?.play();
-      } else if (msg.type == MessageType.seek) {
-        videoController?.seekTo(Duration(seconds: msg.data['position']));
+      if (msg.type == MessageType.pause ||
+          msg.type == MessageType.play ||
+          msg.type == MessageType.seek) {
+        unawaited(_applyPlaybackState(msg.data, fallbackType: msg.type));
+      } else if (msg.type == MessageType.roomUpdate) {
+        _applyRoomSnapshot(msg.data);
+      } else if (msg.type == MessageType.videoChanged) {
+        _applyRemoteMediaChange(msg.data);
       } else if (msg.type == MessageType.userJoined) {
         setUser(msg.data);
       } else if (msg.type == MessageType.userLeft) {
-        print("LEFT");
-        print(msg.data);
         final index = users.indexWhere((u) => u.id == msg.data['id']);
         if (index != -1) {
           users[index] = RoomUser(
@@ -97,8 +115,8 @@ class RoomController extends GetxController {
           );
         }
       } else if (msg.type == MessageType.chat) {
-        // Add chat message to list
-        chatMessages.add({
+        _upsertChatMessage({
+          'id': msg.eventId,
           'message': msg.data['message'] ?? '',
           'userName': msg.data['userName'] ?? 'Unknown',
           'userId': msg.data['userId'] ?? '',
@@ -107,7 +125,7 @@ class RoomController extends GetxController {
         });
       } else if (msg.type == MessageType.reaction) {
         // Add floating reaction
-        final reactionId = DateTime.now().millisecondsSinceEpoch.toString();
+        final reactionId = msg.eventId;
         floatingReactions.add({
           'id': reactionId,
           'emoji': msg.data['emoji'] ?? '❤️',
@@ -119,6 +137,178 @@ class RoomController extends GetxController {
         });
       }
     });
+  }
+
+  void _applyRoomSnapshot(Map<String, dynamic> data) {
+    final modeName = data['room_mode']?.toString();
+    if (modeName != null) {
+      room.value = room.value.copyWith(
+        mode: RoomMode.values.firstWhere(
+          (mode) => mode.name == modeName,
+          orElse: () => RoomMode.friends,
+        ),
+      );
+    }
+    final usersData = data['users'];
+    if (usersData is List) {
+      users.assignAll(
+        usersData.whereType<Map>().map(
+          (entry) => RoomUser(
+            id: entry['id']?.toString() ?? '',
+            name: entry['name']?.toString() ?? 'Unknown',
+            online: entry['is_online'] == true,
+          ),
+        ),
+      );
+    }
+
+    final history = data['messages'];
+    if (history is List) {
+      for (final item in history.whereType<Map>()) {
+        final payload = item['data'];
+        if (payload is! Map) continue;
+        _upsertChatMessage({
+          'id': item['id']?.toString() ?? '',
+          'message': payload['message'] ?? '',
+          'userName': payload['userName'] ?? 'Unknown',
+          'userId': item['user_id']?.toString() ?? '',
+          'timestamp': item['timestamp'] ?? DateTime.now().toIso8601String(),
+        });
+      }
+    }
+    unawaited(_applyPlaybackState(data));
+  }
+
+  void _applyRemoteMediaChange(Map<String, dynamic> data) {
+    final title =
+        data['current_video_title']?.toString() ??
+        data['videoTitle']?.toString();
+    if (title == null || title.isEmpty) return;
+    final alreadyLoaded =
+        room.value.currentVideoTitle == title &&
+        (isMediaLoading.value || videoController?.value.isInitialized == true);
+    room.value = room.value.copyWith(
+      currentVideoTitle: title,
+      currentPosition: Duration.zero,
+      isPlaying: false,
+    );
+    unawaited(videoController?.pause());
+    if (!alreadyLoaded) {
+      requiresMediaSelection.value = true;
+      mediaLoadMessage.value = '$title is ready to sync';
+    }
+    unawaited(_applyPlaybackState(data));
+  }
+
+  void _upsertChatMessage(Map<String, dynamic> value) {
+    final id = value['id']?.toString() ?? '';
+    if (id.isNotEmpty && chatMessages.any((message) => message['id'] == id)) {
+      return;
+    }
+    chatMessages.add(value);
+    chatMessages.sort(
+      (a, b) => (a['timestamp']?.toString() ?? '').compareTo(
+        b['timestamp']?.toString() ?? '',
+      ),
+    );
+  }
+
+  Future<void> _applyPlaybackState(
+    Map<String, dynamic> state, {
+    MessageType? fallbackType,
+  }) async {
+    final revision =
+        (state['playback_revision'] as num?)?.toInt() ??
+        (state['revision'] as num?)?.toInt() ??
+        0;
+    if (revision < _lastPlaybackRevision) return;
+    _lastPlaybackRevision = revision;
+
+    var positionMs =
+        (state['position_ms'] as num?)?.round() ??
+        (state['positionMs'] as num?)?.round() ??
+        (((state['position'] as num?) ?? 0) * 1000).round();
+    final isPlaying =
+        state['is_playing'] as bool? ??
+        (fallbackType == MessageType.play
+            ? true
+            : fallbackType == MessageType.pause
+            ? false
+            : room.value.isPlaying);
+    if (isPlaying) {
+      final updatedAt = DateTime.tryParse(
+        state['playback_updated_at']?.toString() ?? '',
+      );
+      final serverTime = DateTime.tryParse(
+        state['server_time']?.toString() ?? '',
+      );
+      if (updatedAt != null &&
+          serverTime != null &&
+          serverTime.isAfter(updatedAt)) {
+        positionMs += serverTime.difference(updatedAt).inMilliseconds;
+      }
+    }
+
+    final normalized = <String, dynamic>{
+      ...state,
+      'position_ms': positionMs,
+      'is_playing': isPlaying,
+      'playback_revision': revision,
+    };
+    room.value = room.value.copyWith(
+      currentPosition: Duration(milliseconds: positionMs),
+      isPlaying: isPlaying,
+    );
+
+    final player = videoController;
+    if (player == null || !player.value.isInitialized) {
+      _pendingPlaybackState = normalized;
+      return;
+    }
+    _pendingPlaybackState = null;
+    isApplyingSync.value = true;
+    syncStatus.value = 'Syncing playback…';
+    try {
+      final requested = Duration(milliseconds: positionMs);
+      final target = requested < Duration.zero
+          ? Duration.zero
+          : requested > player.value.duration
+          ? player.value.duration
+          : requested;
+      if ((player.value.position - target).abs() >
+          const Duration(milliseconds: 250)) {
+        await player.seekTo(target);
+      }
+      if (isPlaying && !player.value.isPlaying) {
+        await player.play();
+      } else if (!isPlaying && player.value.isPlaying) {
+        await player.pause();
+      }
+    } finally {
+      isApplyingSync.value = false;
+      syncStatus.value = wsService.isJoined.value ? 'Synced' : 'Reconnecting…';
+    }
+  }
+
+  Future<void> onPlayerReady() async {
+    final state = _pendingPlaybackState;
+    if (state != null) await _applyPlaybackState(state);
+  }
+
+  void beginMediaLoad([String message = 'Loading media…']) {
+    mediaLoadError.value = null;
+    mediaLoadMessage.value = message;
+    isMediaLoading.value = true;
+  }
+
+  void finishMediaLoad() {
+    isMediaLoading.value = false;
+    mediaLoadError.value = null;
+  }
+
+  void failMediaLoad(Object error) {
+    isMediaLoading.value = false;
+    mediaLoadError.value = 'Could not load this media';
   }
 
   void setUser(Map data) {
@@ -140,6 +330,11 @@ class RoomController extends GetxController {
     room.value.currentVideoUrl = media.path;
     // Reset subtitle when changing media
     currentSubtitlePath.value = null;
+    requiresMediaSelection.value = false;
+    beginMediaLoad('Loading ${media.name}…');
+    if (_uuid == room.value.hostId && room.value.id.isNotEmpty) {
+      unawaited(wsService.changeVideo(room.value.id, _uuid, media.name));
+    }
   }
 
   // Add method to pick subtitle file
@@ -155,8 +350,6 @@ class RoomController extends GetxController {
         final file = result.files.first;
         if (file.path != null) {
           currentSubtitlePath.value = file.path;
-          print('Subtitle file selected: ${file.path}');
-
           // Notify listeners that subtitle changed
           if (onSubtitleChanged != null) {
             onSubtitleChanged!();
@@ -214,21 +407,22 @@ class RoomController extends GetxController {
     );
   }
 
-  Future createRoom(String roomName, {Media? mediaItem}) async {
+  Future createRoom(
+    String roomName, {
+    Media? mediaItem,
+    RoomMode mode = RoomMode.friends,
+  }) async {
     try {
       final res = await AppConstants.dio.post(
         '/rooms/create/',
-        data: {'room_name': roomName, 'user_name': user.name},
+        data: {
+          'room_name': roomName,
+          'user_name': user.name,
+          'room_mode': mode.name,
+        },
       );
 
       if (res.data['status'] == 'success') {
-        Get.snackbar(
-          'Success',
-          res.data['message'],
-          backgroundColor: Colors.green.withValues(alpha: 0.8),
-          colorText: Colors.white,
-          snackPosition: SnackPosition.TOP,
-        );
         room.value = Room.fromJson(res.data['room']);
         if (mediaItem != null) {
           room.value.currentVideoUrl = mediaItem.path;
@@ -262,7 +456,7 @@ class RoomController extends GetxController {
     }
   }
 
-  Future joinRoom(String roomId) async {
+  Future<bool> joinRoom(String roomId) async {
     try {
       final res = await AppConstants.dio.post(
         '/rooms/join/',
@@ -278,12 +472,27 @@ class RoomController extends GetxController {
           snackPosition: SnackPosition.TOP,
         );
         room.value = Room.fromJson(res.data['room']);
-        for (Map user in res.data['room']['users']) {
-          setUser(user);
+        _uuid = res.data['user']['id'].toString();
+        users.clear();
+        final roomUsers = res.data['room']['users'];
+        if (roomUsers is List) {
+          for (final entry in roomUsers.whereType<Map>()) {
+            setUser(entry);
+          }
         }
 
-        await wsService.joinRoom(room.value.id, _uuid, user.name);
-        Get.toNamed(Routes.ROOM);
+        // A successful REST response is enough to enter the room. The socket
+        // reconnects independently and the room UI already exposes its status.
+        syncStatus.value = 'Connecting…';
+        unawaited(_connectRoomRealtime());
+        Get.snackbar(
+          'Joined',
+          'Opening ${room.value.name}',
+          backgroundColor: Colors.green.withValues(alpha: 0.8),
+          colorText: Colors.white,
+          snackPosition: SnackPosition.TOP,
+        );
+        return true;
       } else {
         Get.snackbar(
           'Error',
@@ -292,6 +501,7 @@ class RoomController extends GetxController {
           colorText: Colors.white,
           snackPosition: SnackPosition.TOP,
         );
+        return false;
       }
     } on DioException catch (e) {
       final serverMessage =
@@ -305,18 +515,33 @@ class RoomController extends GetxController {
         colorText: Colors.white,
         snackPosition: SnackPosition.TOP,
       );
+      return false;
+    } catch (error) {
+      Get.snackbar(
+        'Couldn’t join room',
+        'The room responded, but its details could not be opened. Please try again.',
+        backgroundColor: Colors.red.withValues(alpha: 0.8),
+        colorText: Colors.white,
+        snackPosition: SnackPosition.TOP,
+      );
+      return false;
+    }
+  }
+
+  Future<void> _connectRoomRealtime() async {
+    try {
+      await wsService.joinRoom(room.value.id, _uuid, user.name);
+    } catch (_) {
+      // ReliableWebSocketService has already scheduled a reconnect.
+      syncStatus.value = 'Reconnecting…';
     }
   }
 
   Future<void> playVideo() async {
     Duration? position = await videoController?.position;
-    print("played AT: ${position?.inSeconds}s");
     if (room.value.id == '') {
-      print('playVideo blocked');
       return;
     }
-
-    print('playVideo called - position: ${position?.inSeconds}s');
 
     room.value = room.value.copyWith(
       isPlaying: true,
@@ -328,13 +553,9 @@ class RoomController extends GetxController {
 
   Future<void> pauseVideo() async {
     Duration? position = await videoController?.position;
-    print("PAUSE AT: ${position?.inSeconds}s");
     if (room.value.id == '') {
-      print('pauseVideo blocked');
       return;
     }
-
-    print('pauseVideo called - position: ${position?.inSeconds}s');
 
     room.value = room.value.copyWith(
       isPlaying: false,

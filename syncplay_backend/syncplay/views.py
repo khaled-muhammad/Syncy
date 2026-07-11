@@ -24,10 +24,12 @@ def create_room(request):
     if serializer.is_valid():
         room_name = serializer.validated_data['room_name']
         user_name = serializer.validated_data['user_name']
+        room_mode = serializer.validated_data['room_mode']
         
         # Create room
         room = Room.objects.create(
             name=room_name,
+            room_mode=room_mode,
             host_id=uuid.uuid4()
         )
         
@@ -76,9 +78,15 @@ def join_room(request):
                 'message': 'Username already taken in this room'
             }, status=status.HTTP_400_BAD_REQUEST)
         
-        # If user exists but is offline, allow them to rejoin
-        if existing_user and not existing_user.is_online:
+        # Reserve a stable identity before opening the socket. Membership is
+        # durable; WebSocket sessions only toggle presence.
+        if existing_user:
+            user = existing_user
             logger.info(f"User {user_name} rejoining room {room.name}")
+        else:
+            user = User.objects.create(
+                id=uuid.uuid4(), room=room, name=user_name, is_online=False
+            )
         
         logger.info(f"User {user_name} attempting to join room {room.name}")
         
@@ -86,6 +94,11 @@ def join_room(request):
             'status': 'success',
             'message': 'Ready to join room',
             'room': RoomSerializer(room).data,
+            'user': {
+                'id': str(user.id),
+                'name': user.name,
+                'is_host': user.is_host,
+            },
             'websocket_url': f'/ws/room/{room_id}/'
         }, status=status.HTTP_200_OK)
     

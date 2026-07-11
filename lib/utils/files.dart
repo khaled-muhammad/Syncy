@@ -74,7 +74,7 @@ Future<Image> genVideoThumbnailFromPath(String path) async {
 }
 
 String getFileSystemEntityExtension(FileSystemEntity fse) {
-  return getFileSystemEntityName(fse).split('.').last;
+  return getFileSystemEntityName(fse).split('.').last.toLowerCase();
 }
 
 String getFileSystemEntityName(FileSystemEntity fse) {
@@ -293,8 +293,7 @@ void compressImageV2Worker(Map<String, dynamic> params) async {
 
 Future<bool> isValidMediaFile(String path) {
   final extension = path.split('.').last.toLowerCase();
-  // This will be implemented in HomeController
-  return Future.value(true);
+  return Future.value(mediaExtensions.contains(extension));
 }
 
 bool isImage(String path) {

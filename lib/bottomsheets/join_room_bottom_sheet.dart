@@ -5,6 +5,7 @@ import 'package:get/get.dart';
 import 'package:isar_community/isar.dart';
 import 'package:syncy/controllers/room_controller.dart';
 import 'package:syncy/models/user.dart';
+import 'package:syncy/routes/app_routes.dart';
 import 'package:syncy/widgets/modern_input.dart';
 
 class JoinRoomBottomSheet extends StatefulWidget {
@@ -19,6 +20,8 @@ class _JoinRoomBottomSheetState extends State<JoinRoomBottomSheet> {
   final _roomIDController = TextEditingController();
   final isar = Get.find<Isar>();
   late User user;
+  bool _isJoining = false;
+
   @override
   void initState() {
     super.initState();
@@ -34,6 +37,34 @@ class _JoinRoomBottomSheetState extends State<JoinRoomBottomSheet> {
     }
 
     _nameController.text = user.name;
+  }
+
+  Future<void> _joinRoom() async {
+    FocusManager.instance.primaryFocus?.unfocus();
+    setState(() => _isJoining = true);
+
+    final joined = await Get.find<RoomController>().joinRoom(
+      _roomIDController.text.trim(),
+    );
+    if (!mounted) return;
+
+    if (!joined) {
+      setState(() => _isJoining = false);
+      return;
+    }
+
+    // Dismiss the modal route before pushing the room. Navigating while the
+    // bottom sheet is still open can leave it covering the new screen.
+    Navigator.of(context).pop();
+    await Future<void>.delayed(Duration.zero);
+    Get.toNamed(Routes.ROOM);
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _roomIDController.dispose();
+    super.dispose();
   }
 
   @override
@@ -79,17 +110,21 @@ class _JoinRoomBottomSheetState extends State<JoinRoomBottomSheet> {
                 ),
                 const SizedBox(height: 20),
                 ElevatedButton.icon(
-                  onPressed: _roomIDController.text.trim().isEmpty
+                  onPressed: _roomIDController.text.trim().isEmpty || _isJoining
                       ? null
-                      : () {
-                          Get.find<RoomController>().joinRoom(
-                            _roomIDController.text.trim(),
-                          );
-                        },
-                  icon: const Icon(Icons.start_rounded, color: Colors.white),
-                  label: const Text(
-                    "Join",
-                    style: TextStyle(
+                      : _joinRoom,
+                  icon: _isJoining
+                      ? const SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.start_rounded, color: Colors.white),
+                  label: Text(
+                    _isJoining ? 'Joining…' : 'Join',
+                    style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       color: Colors.white,
                       letterSpacing: 1.0,

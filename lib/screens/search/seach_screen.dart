@@ -7,6 +7,7 @@ import 'package:syncy/bottomsheets/create_room_bottom_sheet.dart';
 import 'package:syncy/models/media.dart';
 import 'package:syncy/widgets/media_card.dart';
 import 'package:syncy/widgets/modern_input.dart';
+import 'package:syncy/widgets/native_purple_mesh_background.dart';
 
 class SearchScreen extends StatefulWidget {
   final List<Media> media;
@@ -169,150 +170,156 @@ class _SearchScreenState extends State<SearchScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black.withAlpha(190),
-      body: Stack(
-        children: [
-          Positioned.fill(
-            child: AnimatedOpacity(
-              duration: const Duration(milliseconds: 250),
-              opacity: show ? 1 : 0,
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-                child: const SizedBox.shrink(),
+    return NativePurpleMeshBackground(
+      child: Scaffold(
+        backgroundColor: Colors.black.withValues(alpha: .62),
+        body: Stack(
+          children: [
+            Positioned.fill(
+              child: AnimatedOpacity(
+                duration: const Duration(milliseconds: 250),
+                opacity: show ? 1 : 0,
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+                  child: const SizedBox.shrink(),
+                ),
               ),
             ),
-          ),
-          SafeArea(
-            child: Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: AnimatedOpacity(
-                          duration: const Duration(milliseconds: 400),
-                          opacity: show ? 1 : 0,
-                          child: ModernInput(
-                            controller: _searchController,
-                            hintText: "Smart search ...",
-                            icon: Icons.search_rounded,
-                            onCancelPressed: () {
-                              setState(() {
-                                filteredMedia = [];
-                              });
-                            },
-                            onChanged: _onSearchChanged,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Hero(
-                        tag: 'search-btn',
-                        child: ClipRRect(
-                          borderRadius: BorderRadiusGeometry.circular(100),
-                          child: BackdropFilter(
-                            filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-                            child: Container(
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: Colors.white24,
-                              ),
-                              child: IconButton(
-                                style: IconButton.styleFrom(
-                                  foregroundColor: Colors.white,
-                                  tapTargetSize:
-                                      MaterialTapTargetSize.shrinkWrap,
-                                  fixedSize: Size(52, 52),
-                                ),
-                                onPressed: () {
-                                  Get.back();
-                                },
-                                icon: Icon(Icons.arrow_back_ios_new_rounded),
-                              ),
+            SafeArea(
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: AnimatedOpacity(
+                            duration: const Duration(milliseconds: 400),
+                            opacity: show ? 1 : 0,
+                            child: ModernInput(
+                              controller: _searchController,
+                              hintText: "Smart search ...",
+                              icon: Icons.search_rounded,
+                              onCancelPressed: () {
+                                setState(() {
+                                  filteredMedia = [];
+                                });
+                              },
+                              onChanged: _onSearchChanged,
                             ),
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                ),
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      vertical: 12,
-                      horizontal: 20,
-                    ),
-                    child:
-                        filteredMedia.isEmpty &&
-                            _searchController.text.trim().isNotEmpty
-                        ? Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.search_off_rounded,
-                                  size: 64,
-                                  color: Colors.white.withValues(alpha: 0.5),
+                        const SizedBox(width: 10),
+                        Hero(
+                          tag: 'search-btn',
+                          child: ClipRRect(
+                            borderRadius: BorderRadiusGeometry.circular(100),
+                            child: BackdropFilter(
+                              filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: Colors.white24,
                                 ),
-                                const SizedBox(height: 16),
-                                Text(
-                                  'No results found',
-                                  style: TextStyle(
-                                    color: Colors.white.withValues(alpha: 0.7),
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w500,
+                                child: IconButton(
+                                  style: IconButton.styleFrom(
+                                    foregroundColor: Colors.white,
+                                    tapTargetSize:
+                                        MaterialTapTargetSize.shrinkWrap,
+                                    fixedSize: Size(52, 52),
                                   ),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  'Try different keywords or check spelling',
-                                  style: TextStyle(
-                                    color: Colors.white.withValues(alpha: 0.5),
-                                    fontSize: 14,
-                                  ),
-                                  textAlign: TextAlign.center,
-                                ),
-                              ],
-                            ),
-                          )
-                        : GridView.builder(
-                            itemCount: filteredMedia.length,
-                            padding: const EdgeInsets.only(bottom: 100),
-                            gridDelegate:
-                                SliverGridDelegateWithFixedCrossAxisCount(
-                                  crossAxisCount: 2,
-                                  crossAxisSpacing: 20,
-                                  mainAxisSpacing: 25,
-                                  childAspectRatio: 3 / 5,
-                                ),
-                            itemBuilder: (context, index) {
-                              final mediaElement = filteredMedia[index];
-                              return MediaCard(
-                                mediaElement: mediaElement,
-                                onPressed: () {
-                                  if (widget.onSelect != null) {
-                                    widget.onSelect!(mediaElement);
+                                  onPressed: () {
                                     Get.back();
-                                  } else {
-                                    // Show create room dialog when searching from home
-                                    Get.bottomSheet(
-                                      CreateRoomBottomSheet(
-                                        media: mediaElement,
-                                      ),
-                                    );
-                                  }
-                                },
-                              );
-                            },
+                                  },
+                                  icon: Icon(Icons.arrow_back_ios_new_rounded),
+                                ),
+                              ),
+                            ),
                           ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 12,
+                        horizontal: 20,
+                      ),
+                      child:
+                          filteredMedia.isEmpty &&
+                              _searchController.text.trim().isNotEmpty
+                          ? Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.search_off_rounded,
+                                    size: 64,
+                                    color: Colors.white.withValues(alpha: 0.5),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    'No results found',
+                                    style: TextStyle(
+                                      color: Colors.white.withValues(
+                                        alpha: 0.7,
+                                      ),
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'Try different keywords or check spelling',
+                                    style: TextStyle(
+                                      color: Colors.white.withValues(
+                                        alpha: 0.5,
+                                      ),
+                                      fontSize: 14,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ],
+                              ),
+                            )
+                          : GridView.builder(
+                              itemCount: filteredMedia.length,
+                              padding: const EdgeInsets.only(bottom: 100),
+                              gridDelegate:
+                                  SliverGridDelegateWithFixedCrossAxisCount(
+                                    crossAxisCount: 2,
+                                    crossAxisSpacing: 20,
+                                    mainAxisSpacing: 25,
+                                    childAspectRatio: 3 / 5,
+                                  ),
+                              itemBuilder: (context, index) {
+                                final mediaElement = filteredMedia[index];
+                                return MediaCard(
+                                  mediaElement: mediaElement,
+                                  onPressed: () {
+                                    if (widget.onSelect != null) {
+                                      widget.onSelect!(mediaElement);
+                                      Get.back();
+                                    } else {
+                                      // Show create room dialog when searching from home
+                                      Get.bottomSheet(
+                                        CreateRoomBottomSheet(
+                                          media: mediaElement,
+                                        ),
+                                      );
+                                    }
+                                  },
+                                );
+                              },
+                            ),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
