@@ -52,6 +52,20 @@ class ControlsOverlayState extends State<ControlsOverlay> {
   List<SubtitleItem> _subtitles = [];
   String? _currentSubtitleText;
 
+  // Double-tap-to-seek (YouTube-style: tap the left/right half of the player).
+  // We detect the double tap manually so a single tap toggles the controls
+  // instantly (no ~300ms gesture-arena delay from onDoubleTap).
+  static const Duration _seekStep = Duration(seconds: 10);
+  static const Duration _doubleTapWindow = Duration(milliseconds: 300);
+  DateTime? _lastTapAt;
+  bool _seekChainActive = false;
+  bool _visibilityBeforeChain = false;
+
+  int _seekIndicatorSide = 0; // -1 = rewind (left), 1 = forward (right)
+  int _accumulatedSeekSeconds = 0;
+  bool _seekIndicatorVisible = false;
+  Timer? _seekIndicatorTimer;
+
   @override
   void initState() {
     super.initState();
@@ -312,6 +326,7 @@ class ControlsOverlayState extends State<ControlsOverlay> {
   @override
   void dispose() {
     _hideTimer?.cancel();
+    _seekIndicatorTimer?.cancel();
     widget.controller.removeListener(_updateSubtitles);
 
     // Clean up subtitle change callback
@@ -354,6 +369,130 @@ class ControlsOverlayState extends State<ControlsOverlay> {
 
     // Force immediate UI update
     setState(() {});
+  }
+
+  void _seekBy(Duration offset) {
+    final value = widget.controller.value;
+    if (!value.isInitialized) return;
+    var target = value.position + offset;
+    if (target < Duration.zero) target = Duration.zero;
+    if (target > value.duration) target = value.duration;
+    widget.controller.seekTo(target);
+    // Broadcast so the whole room stays in sync.
+    widget.onSeek?.call(target);
+  }
+
+  void _onSurfaceTapUp(double tapDx, double width) {
+    final now = DateTime.now();
+    final int side = (width <= 0 || tapDx < width / 2) ? -1 : 1;
+    final bool consecutive =
+        _lastTapAt != null && now.difference(_lastTapAt!) < _doubleTapWindow;
+    _lastTapAt = now;
+
+    if (consecutive) {
+      // Second (or further) quick tap => this is a seek gesture, not a toggle.
+      if (!_seekChainActive) {
+        _seekChainActive = true;
+        // Undo the toggle the first tap of this pair caused so a double tap
+        // seeks without leaving the controls in a flipped state.
+        if (_controlsVisible != _visibilityBeforeChain) {
+          setState(() => _controlsVisible = _visibilityBeforeChain);
+          if (_controlsVisible) {
+            _resetHideTimer();
+          } else {
+            _hideTimer?.cancel();
+          }
+        }
+      }
+      _registerSeek(side);
+    } else {
+      // Fresh tap: toggle the controls immediately (no gesture delay).
+      _seekChainActive = false;
+      _visibilityBeforeChain = _controlsVisible;
+      if (_controlsVisible) {
+        _hideControls();
+      } else {
+        _showControls();
+      }
+    }
+  }
+
+  void _registerSeek(int side) {
+    // side: -1 = rewind (left half), 1 = forward (right half)
+    if (_seekIndicatorSide != side || !_seekIndicatorVisible) {
+      _accumulatedSeekSeconds = 0;
+    }
+    _seekIndicatorSide = side;
+    _accumulatedSeekSeconds += _seekStep.inSeconds;
+    _seekIndicatorVisible = true;
+    _seekBy(Duration(seconds: side * _seekStep.inSeconds));
+    if (_controlsVisible) _resetHideTimer();
+    setState(() {});
+
+    _seekIndicatorTimer?.cancel();
+    _seekIndicatorTimer = Timer(const Duration(milliseconds: 550), () {
+      if (mounted) {
+        setState(() => _seekIndicatorVisible = false);
+      }
+    });
+  }
+
+  Widget _buildSeekFeedback() {
+    final bool isForward = _seekIndicatorSide > 0;
+    return IgnorePointer(
+      child: AnimatedOpacity(
+        opacity: _seekIndicatorVisible ? 1.0 : 0.0,
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOut,
+        child: Align(
+          alignment: isForward
+              ? Alignment.centerRight
+              : Alignment.centerLeft,
+          child: FractionallySizedBox(
+            widthFactor: 0.5,
+            heightFactor: 1,
+            child: Center(
+              child: AnimatedScale(
+                scale: _seekIndicatorVisible ? 1.0 : 0.8,
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeOut,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 22,
+                    vertical: 16,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.45),
+                    borderRadius: BorderRadius.circular(60),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        isForward
+                            ? Icons.fast_forward_rounded
+                            : Icons.fast_rewind_rounded,
+                        color: Colors.white,
+                        size: 40,
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        '${_accumulatedSeekSeconds}s',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   void _toggleFullScreen() {
@@ -455,6 +594,21 @@ class ControlsOverlayState extends State<ControlsOverlay> {
   Widget build(BuildContext context) {
     return Stack(
       children: <Widget>[
+        // Base interaction layer: a single full-area detector. A single tap
+        // toggles the controls instantly; a quick second tap seeks (left half
+        // back, right half forward, YouTube-style). Double taps are detected
+        // manually so single taps have no gesture-arena delay. Sits at the
+        // bottom so the play button, slider and top buttons stay tappable.
+        Positioned.fill(
+          child: LayoutBuilder(
+            builder: (context, constraints) => GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTapUp: (details) =>
+                  _onSurfaceTapUp(details.localPosition.dx, constraints.maxWidth),
+              child: const SizedBox.expand(),
+            ),
+          ),
+        ),
         // Subtitle Display Overlay
         if (_currentSubtitleText != null && _currentSubtitleText!.isNotEmpty)
           Positioned(
@@ -478,36 +632,34 @@ class ControlsOverlayState extends State<ControlsOverlay> {
               ),
             ),
           ),
-        AnimatedOpacity(
+        IgnorePointer(
+          ignoring: !_controlsVisible,
+          child: AnimatedOpacity(
           opacity: _controlsVisible ? 1.0 : 0.0,
           duration: const Duration(milliseconds: 300),
-          child: Container(
-            width: double.infinity,
-            height: double.infinity,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Colors.black.withValues(alpha: 0.7),
-                  Colors.transparent,
-                  Colors.transparent,
-                  Colors.black.withValues(alpha: 0.7),
-                ],
-                stops: const [0.0, 0.3, 0.7, 1.0],
-              ),
-            ),
-            child: GestureDetector(
-              behavior: HitTestBehavior.translucent,
-              onTap: () {
-                if (_controlsVisible) {
-                  _hideControls();
-                } else {
-                  _showControls();
-                }
-              },
-              child: Stack(
+          child: Stack(
                 children: [
+                  // Non-interactive dim gradient: taps on empty areas fall
+                  // through to the surface gesture layer below.
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Colors.black.withValues(alpha: 0.7),
+                              Colors.transparent,
+                              Colors.transparent,
+                              Colors.black.withValues(alpha: 0.7),
+                            ],
+                            stops: const [0.0, 0.3, 0.7, 1.0],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                   /*Align(
                     alignment: Alignment.topRight,
                     child: PopupMenuButton<double>(
@@ -795,18 +947,8 @@ class ControlsOverlayState extends State<ControlsOverlay> {
               ),
             ),
           ),
-        ),
-        if (!_controlsVisible)
-          GestureDetector(
-            onTap: () {
-              _showControls();
-            },
-            child: Container(
-              width: double.infinity,
-              height: double.infinity,
-              color: Colors.transparent,
-            ),
-          ),
+        // Transient seek feedback (never absorbs touches).
+        Positioned.fill(child: _buildSeekFeedback()),
       ],
     );
   }
