@@ -984,6 +984,10 @@ class _FullScreenVideoPage extends StatefulWidget {
 
 class _FullScreenVideoPageState extends State<_FullScreenVideoPage> {
   late VoidCallback _videoListener;
+  Timer? _reactionDockTimer;
+  bool _reactionDockVisible = true;
+  double _reactionDragDistance = 0;
+  bool _reactionDragHandled = false;
 
   @override
   void initState() {
@@ -1013,10 +1017,68 @@ class _FullScreenVideoPageState extends State<_FullScreenVideoPage> {
       if (mounted) setState(() {});
     };
     widget.controller.addListener(_videoListener);
+    _scheduleReactionDockHide(const Duration(seconds: 3));
+  }
+
+  void _scheduleReactionDockHide([
+    Duration delay = const Duration(seconds: 5),
+  ]) {
+    _reactionDockTimer?.cancel();
+    _reactionDockTimer = Timer(delay, _hideReactionDock);
+  }
+
+  void _showReactionDock() {
+    if (!_reactionDockVisible && mounted) {
+      setState(() => _reactionDockVisible = true);
+    }
+    _scheduleReactionDockHide();
+  }
+
+  void _hideReactionDock() {
+    _reactionDockTimer?.cancel();
+    _reactionDockTimer = null;
+    if (_reactionDockVisible && mounted) {
+      setState(() => _reactionDockVisible = false);
+    }
+  }
+
+  void _onReactionDragStart(DragStartDetails details) {
+    _reactionDockTimer?.cancel();
+    _reactionDragDistance = 0;
+    _reactionDragHandled = false;
+  }
+
+  void _onReactionDragUpdate(DragUpdateDetails details) {
+    if (_reactionDragHandled) return;
+    _reactionDragDistance += details.delta.dy;
+    if (_reactionDragDistance <= -18) {
+      _reactionDragHandled = true;
+      _showReactionDock();
+    } else if (_reactionDragDistance >= 18) {
+      _reactionDragHandled = true;
+      _hideReactionDock();
+    }
+  }
+
+  void _onReactionDragEnd(DragEndDetails details) {
+    if (_reactionDragHandled) return;
+    final velocity = details.primaryVelocity ?? 0;
+    if (velocity < -180) {
+      _showReactionDock();
+    } else if (velocity > 180) {
+      _hideReactionDock();
+    } else if (_reactionDockVisible) {
+      _scheduleReactionDockHide();
+    }
+  }
+
+  void _onReactionSent() {
+    _scheduleReactionDockHide(const Duration(milliseconds: 1100));
   }
 
   @override
   void dispose() {
+    _reactionDockTimer?.cancel();
     // Remove the listener
     widget.controller.removeListener(_videoListener);
     // Restore system UI and orientation
@@ -1072,20 +1134,75 @@ class _FullScreenVideoPageState extends State<_FullScreenVideoPage> {
 
     return Scaffold(
       backgroundColor: Colors.black,
-      body: Stack(
-        fit: StackFit.expand,
-        children: [
-          Center(child: videoSurface),
-          // Screen-level placement avoids clipping and FittedBox distortion.
-          const Positioned.fill(child: ReactionOverlay(bottomInset: 125)),
-          const SafeArea(
-            minimum: EdgeInsets.only(bottom: 70),
-            child: Align(
-              alignment: Alignment.bottomCenter,
-              child: ReactionBar(),
+      body: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onVerticalDragStart: _onReactionDragStart,
+        onVerticalDragUpdate: _onReactionDragUpdate,
+        onVerticalDragEnd: _onReactionDragEnd,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Center(child: videoSurface),
+            // Screen-level placement avoids clipping and FittedBox distortion.
+            const Positioned.fill(child: ReactionOverlay(bottomInset: 125)),
+            SafeArea(
+              minimum: const EdgeInsets.only(bottom: 70),
+              child: Align(
+                alignment: Alignment.bottomCenter,
+                child: Semantics(
+                  container: true,
+                  label: 'Reaction controls',
+                  hint: _reactionDockVisible
+                      ? 'Swipe down to hide'
+                      : 'Swipe up or tap to show',
+                  onTap: _reactionDockVisible ? null : _showReactionDock,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.translucent,
+                    onTap: _reactionDockVisible ? null : _showReactionDock,
+                    child: AnimatedSlide(
+                      offset: _reactionDockVisible
+                          ? Offset.zero
+                          : const Offset(0, 1.85),
+                      duration: _reactionDockVisible
+                          ? const Duration(milliseconds: 180)
+                          : const Duration(milliseconds: 280),
+                      curve: _reactionDockVisible
+                          ? Curves.easeOutBack
+                          : Curves.easeInCubic,
+                      child: AnimatedOpacity(
+                        opacity: _reactionDockVisible ? 1 : .14,
+                        duration: _reactionDockVisible
+                            ? const Duration(milliseconds: 140)
+                            : const Duration(milliseconds: 240),
+                        curve: Curves.easeOut,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 38,
+                              height: 4,
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: .72),
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                            ),
+                            const SizedBox(height: 7),
+                            IgnorePointer(
+                              ignoring: !_reactionDockVisible,
+                              child: ReactionBar(
+                                onReactionSent: _onReactionSent,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

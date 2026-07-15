@@ -106,7 +106,9 @@ class _FloatingReactionState extends State<_FloatingReaction>
 }
 
 class ReactionBar extends StatelessWidget {
-  const ReactionBar({super.key});
+  const ReactionBar({super.key, this.onReactionSent});
+
+  final VoidCallback? onReactionSent;
 
   static const friendsReactions = ['😂', '🔥', '😮', '👏', '👍', '🎉'];
   static const coupleReactions = ['❤️', '😘', '🥰', '💋', '🌹', '🫶'];
@@ -143,7 +145,10 @@ class ReactionBar extends StatelessWidget {
                   label: 'Send $emoji reaction',
                   child: InkResponse(
                     radius: 23,
-                    onTap: () => controller.sendReaction(emoji),
+                    onTap: () {
+                      controller.sendReaction(emoji);
+                      onReactionSent?.call();
+                    },
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 7,
