@@ -232,6 +232,7 @@ class _RoomScreenState extends State<RoomScreen> {
                                           ControlsOverlay(
                                             controller:
                                                 controller.videoController!,
+                                            roomController: controller,
                                             onPlayToggle: (isPlaying) {
                                               if (isPlaying) {
                                                 controller.playVideo();
@@ -312,7 +313,7 @@ class _RoomScreenState extends State<RoomScreen> {
                             // Reaction bar - hidden when keyboard is open
                             if (!keyboardOpen) ...[
                               const SizedBox(height: 12),
-                              const ReactionBar(),
+                              ReactionBar(controller: controller),
                             ],
                             const SizedBox(height: 12),
                             // Chat panel with fixed height
@@ -330,7 +331,7 @@ class _RoomScreenState extends State<RoomScreen> {
                         ),
                       ),
                       // Floating reactions overlay
-                      const ReactionOverlay(),
+                      ReactionOverlay(controller: controller),
                     ],
                   );
                 },

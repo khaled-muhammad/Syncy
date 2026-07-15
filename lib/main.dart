@@ -23,7 +23,10 @@ void main() async {
 
   // Initialize ThumbnailService
   Get.put(ThumbnailService());
-  Get.lazyPut<RoomController>(() => RoomController(), fenix: true);
+  // Room state owns the active socket and must remain a single app-wide
+  // instance. Recreating it mid-room leaves fullscreen bound to a fresh,
+  // disconnected controller while the portrait screen still has the old one.
+  Get.put(RoomController(), permanent: true);
 
   runApp(const MyApp());
 }

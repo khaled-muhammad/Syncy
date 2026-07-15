@@ -6,19 +6,20 @@ import 'package:syncy/controllers/room_controller.dart';
 import 'package:syncy/models/room.dart';
 
 class ReactionOverlay extends StatelessWidget {
-  const ReactionOverlay({super.key, this.bottomInset = 72});
+  const ReactionOverlay({super.key, this.bottomInset = 72, this.controller});
 
   final double bottomInset;
+  final RoomController? controller;
 
   @override
   Widget build(BuildContext context) {
-    final controller = Get.find<RoomController>();
+    final roomController = controller ?? Get.find<RoomController>();
     return IgnorePointer(
       child: LayoutBuilder(
         builder: (context, constraints) => Obx(
           () => Stack(
             clipBehavior: Clip.none,
-            children: controller.floatingReactions
+            children: roomController.floatingReactions
                 .map(
                   (reaction) => _FloatingReaction(
                     key: ValueKey(reaction['id']),
@@ -106,62 +107,68 @@ class _FloatingReactionState extends State<_FloatingReaction>
 }
 
 class ReactionBar extends StatelessWidget {
-  const ReactionBar({super.key, this.onReactionSent});
+  const ReactionBar({super.key, this.onReactionSent, this.controller});
 
   final VoidCallback? onReactionSent;
+  final RoomController? controller;
 
   static const friendsReactions = ['😂', '🔥', '😮', '👏', '👍', '🎉'];
   static const coupleReactions = ['❤️', '😘', '🥰', '💋', '🌹', '🫶'];
 
   @override
   Widget build(BuildContext context) {
-    final controller = Get.find<RoomController>();
-    final reactions = controller.room.value.mode == RoomMode.couple
-        ? coupleReactions
-        : friendsReactions;
-    return Container(
-      constraints: const BoxConstraints(maxWidth: 340),
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
-      decoration: BoxDecoration(
-        color: const Color(0xFF120C20).withValues(alpha: .88),
-        borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: Colors.white.withValues(alpha: .12)),
-        boxShadow: const [
-          BoxShadow(
-            color: Colors.black38,
-            blurRadius: 18,
-            offset: Offset(0, 8),
-          ),
-        ],
-      ),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: reactions
-              .map(
-                (emoji) => Semantics(
-                  button: true,
-                  label: 'Send $emoji reaction',
-                  child: InkResponse(
-                    radius: 23,
-                    onTap: () {
-                      controller.sendReaction(emoji);
-                      onReactionSent?.call();
-                    },
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 7,
-                        vertical: 4,
+    final roomController = controller ?? Get.find<RoomController>();
+    return Obx(() {
+      final reactions = roomController.room.value.mode == RoomMode.couple
+          ? coupleReactions
+          : friendsReactions;
+      return Container(
+        constraints: const BoxConstraints(maxWidth: 340),
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
+        decoration: BoxDecoration(
+          color: const Color(0xFF120C20).withValues(alpha: .88),
+          borderRadius: BorderRadius.circular(28),
+          border: Border.all(color: Colors.white.withValues(alpha: .12)),
+          boxShadow: const [
+            BoxShadow(
+              color: Colors.black38,
+              blurRadius: 18,
+              offset: Offset(0, 8),
+            ),
+          ],
+        ),
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: reactions
+                .map(
+                  (emoji) => Semantics(
+                    button: true,
+                    label: 'Send $emoji reaction',
+                    child: InkResponse(
+                      radius: 23,
+                      onTap: () {
+                        roomController.sendReaction(emoji);
+                        onReactionSent?.call();
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 7,
+                          vertical: 4,
+                        ),
+                        child: Text(
+                          emoji,
+                          style: const TextStyle(fontSize: 24),
+                        ),
                       ),
-                      child: Text(emoji, style: const TextStyle(fontSize: 24)),
                     ),
                   ),
-                ),
-              )
-              .toList(),
+                )
+                .toList(),
+          ),
         ),
-      ),
-    );
+      );
+    });
   }
 }

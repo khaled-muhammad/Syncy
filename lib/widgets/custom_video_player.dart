@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:get/get.dart';
 import 'package:icons_plus/icons_plus.dart';
 import 'package:video_player/video_player.dart';
 import 'package:syncy/controllers/room_controller.dart';
@@ -23,11 +22,13 @@ class ControlsOverlay extends StatefulWidget {
   const ControlsOverlay({
     super.key,
     required this.controller,
+    required this.roomController,
     this.onPlayToggle,
     this.onSeek,
   });
 
   final VideoPlayerController controller;
+  final RoomController roomController;
   final Function(bool isPlaying)? onPlayToggle;
   final Function(Duration position)? onSeek;
 
@@ -73,14 +74,13 @@ class ControlsOverlayState extends State<ControlsOverlay> {
     widget.controller.addListener(_updateSubtitles);
 
     // Register for subtitle change notifications
-    final RoomController roomController = Get.find<RoomController>();
-    roomController.onSubtitleChanged = () {
+    widget.roomController.onSubtitleChanged = () {
       _loadSubtitles();
     };
   }
 
   void _loadSubtitles() {
-    final RoomController roomController = Get.find<RoomController>();
+    final roomController = widget.roomController;
     if (roomController.currentSubtitlePath.value != null) {
       print(
         'Loading subtitles from: ${roomController.currentSubtitlePath.value}',
@@ -294,7 +294,7 @@ class ControlsOverlayState extends State<ControlsOverlay> {
     final position = widget.controller.value.position;
 
     // Apply subtitle delay from room controller
-    final RoomController roomController = Get.find<RoomController>();
+    final roomController = widget.roomController;
     final delayMs = roomController.subtitleDelay.value;
     final adjustedPosition = Duration(
       milliseconds: position.inMilliseconds + delayMs,
@@ -330,8 +330,7 @@ class ControlsOverlayState extends State<ControlsOverlay> {
     widget.controller.removeListener(_updateSubtitles);
 
     // Clean up subtitle change callback
-    final RoomController roomController = Get.find<RoomController>();
-    roomController.onSubtitleChanged = null;
+    widget.roomController.onSubtitleChanged = null;
 
     super.dispose();
   }
@@ -510,6 +509,7 @@ class ControlsOverlayState extends State<ControlsOverlay> {
           settings: RouteSettings(name: '_FullScreenVideoPage'),
           builder: (context) => _FullScreenVideoPage(
             controller: widget.controller,
+            roomController: widget.roomController,
             onPlayToggle: widget.onPlayToggle,
             onSeek: widget.onSeek,
           ),
@@ -519,7 +519,7 @@ class ControlsOverlayState extends State<ControlsOverlay> {
   }
 
   void _showSubtitleDelayDialog(BuildContext context) {
-    final RoomController roomController = Get.find<RoomController>();
+    final roomController = widget.roomController;
     final currentDelay = roomController.subtitleDelay.value;
 
     showDialog(
@@ -712,8 +712,7 @@ class ControlsOverlayState extends State<ControlsOverlay> {
                           icon: Icon(Icons.subtitles, color: Colors.white),
                           tooltip: 'Subtitle Options',
                           onSelected: (String value) {
-                            final RoomController roomController =
-                                Get.find<RoomController>();
+                            final roomController = widget.roomController;
                             if (value == 'select') {
                               roomController.selectSubtitleFile();
                             } else if (value == 'clear') {
@@ -724,8 +723,7 @@ class ControlsOverlayState extends State<ControlsOverlay> {
                             _resetHideTimer();
                           },
                           itemBuilder: (BuildContext context) {
-                            final RoomController roomController =
-                                Get.find<RoomController>();
+                            final roomController = widget.roomController;
                             return [
                               PopupMenuItem<String>(
                                 value: 'select',
@@ -969,11 +967,13 @@ class ControlsOverlayState extends State<ControlsOverlay> {
 
 class _FullScreenVideoPage extends StatefulWidget {
   final VideoPlayerController controller;
+  final RoomController roomController;
   final Function(bool)? onPlayToggle;
   final Function(Duration)? onSeek;
 
   const _FullScreenVideoPage({
     required this.controller,
+    required this.roomController,
     this.onPlayToggle,
     this.onSeek,
   });
@@ -1110,6 +1110,7 @@ class _FullScreenVideoPageState extends State<_FullScreenVideoPage> {
                     VideoPlayer(widget.controller),
                     ControlsOverlay(
                       controller: widget.controller,
+                      roomController: widget.roomController,
                       onPlayToggle: widget.onPlayToggle,
                       onSeek: widget.onSeek,
                     ),
@@ -1125,6 +1126,7 @@ class _FullScreenVideoPageState extends State<_FullScreenVideoPage> {
                 VideoPlayer(widget.controller),
                 ControlsOverlay(
                   controller: widget.controller,
+                  roomController: widget.roomController,
                   onPlayToggle: widget.onPlayToggle,
                   onSeek: widget.onSeek,
                 ),
@@ -1144,7 +1146,12 @@ class _FullScreenVideoPageState extends State<_FullScreenVideoPage> {
           children: [
             Center(child: videoSurface),
             // Screen-level placement avoids clipping and FittedBox distortion.
-            const Positioned.fill(child: ReactionOverlay(bottomInset: 125)),
+            Positioned.fill(
+              child: ReactionOverlay(
+                bottomInset: 125,
+                controller: widget.roomController,
+              ),
+            ),
             SafeArea(
               minimum: const EdgeInsets.only(bottom: 70),
               child: Align(
@@ -1190,6 +1197,7 @@ class _FullScreenVideoPageState extends State<_FullScreenVideoPage> {
                             IgnorePointer(
                               ignoring: !_reactionDockVisible,
                               child: ReactionBar(
+                                controller: widget.roomController,
                                 onReactionSent: _onReactionSent,
                               ),
                             ),
