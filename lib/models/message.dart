@@ -14,6 +14,7 @@ enum MessageType {
   heartbeat,
   chat,
   reaction,
+  typing,
   ack,
 }
 
@@ -196,6 +197,20 @@ class Message {
       roomId: roomId,
       userId: userId,
       data: {'emoji': emoji, 'userName': userName},
+    );
+  }
+
+  factory Message.typing({
+    required String roomId,
+    required String userId,
+    required String userName,
+    required bool isTyping,
+  }) {
+    return Message(
+      type: MessageType.typing,
+      roomId: roomId,
+      userId: userId,
+      data: {'isTyping': isTyping, 'userName': userName},
     );
   }
 }

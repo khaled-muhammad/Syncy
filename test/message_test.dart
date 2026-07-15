@@ -40,4 +40,19 @@ void main() {
     expect(message.type, MessageType.error);
     expect(message.data['error'], 'Room or user not found');
   });
+
+  test('typing state round-trips as an ephemeral protocol message', () {
+    final message = Message.typing(
+      roomId: 'room',
+      userId: 'user',
+      userName: 'Alice',
+      isTyping: true,
+    );
+
+    final decoded = Message.fromJson(message.toJson());
+
+    expect(decoded.type, MessageType.typing);
+    expect(decoded.eventId, message.eventId);
+    expect(decoded.data, {'isTyping': true, 'userName': 'Alice'});
+  });
 }

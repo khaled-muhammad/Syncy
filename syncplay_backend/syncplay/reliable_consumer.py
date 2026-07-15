@@ -55,6 +55,7 @@ class ReliableSyncPlayConsumer(AsyncWebsocketConsumer):
                 'video_changed': self.handle_video_change,
                 'chat': self.handle_chat,
                 'reaction': self.handle_reaction,
+                'typing': self.handle_typing,
                 'leave': self.send_ack,
             }
             handler = handlers.get(kind)
@@ -156,11 +157,31 @@ class ReliableSyncPlayConsumer(AsyncWebsocketConsumer):
         emoji = str((data.get('data') or {}).get('emoji') or '').strip()
         if not emoji:
             raise ValueError('Reaction cannot be empty')
+        event_id = str(self.parse_event_id(data) or uuid.uuid4())
         await self.channel_layer.group_send(
             self.room_group_name,
             {
                 'type': 'reaction_event',
+                'event_id': event_id,
                 'emoji': emoji,
+                'user_id': self.user_id,
+                'user_name': self.user.name,
+                'timestamp': timezone.now().isoformat(),
+            },
+        )
+        await self.send_ack(data)
+
+    async def handle_typing(self, data):
+        is_typing = (data.get('data') or {}).get('isTyping')
+        if not isinstance(is_typing, bool):
+            raise ValueError('Typing state must be a boolean')
+        event_id = str(self.parse_event_id(data) or uuid.uuid4())
+        await self.channel_layer.group_send(
+            self.room_group_name,
+            {
+                'type': 'typing_event',
+                'event_id': event_id,
+                'is_typing': is_typing,
                 'user_id': self.user_id,
                 'user_name': self.user.name,
                 'timestamp': timezone.now().isoformat(),
@@ -251,8 +272,23 @@ class ReliableSyncPlayConsumer(AsyncWebsocketConsumer):
         await self.send_json(
             {
                 'type': 'reaction',
+                'eventId': event['event_id'],
                 'data': {
                     'emoji': event['emoji'],
+                    'userId': event['user_id'],
+                    'userName': event['user_name'],
+                    'timestamp': event['timestamp'],
+                },
+            }
+        )
+
+    async def typing_event(self, event):
+        await self.send_json(
+            {
+                'type': 'typing',
+                'eventId': event['event_id'],
+                'data': {
+                    'isTyping': event['is_typing'],
                     'userId': event['user_id'],
                     'userName': event['user_name'],
                     'timestamp': event['timestamp'],

@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:syncy/controllers/room_controller.dart';
@@ -17,7 +19,19 @@ class _ChatPanelState extends State<ChatPanel> {
   final FocusNode _focus = FocusNode();
 
   @override
+  void initState() {
+    super.initState();
+    _focus.addListener(_handleFocusChange);
+  }
+
+  void _handleFocusChange() {
+    if (!_focus.hasFocus) controller.stopTyping();
+  }
+
+  @override
   void dispose() {
+    controller.stopTyping();
+    _focus.removeListener(_handleFocusChange);
     _text.dispose();
     _scroll.dispose();
     _focus.dispose();
@@ -29,6 +43,7 @@ class _ChatPanelState extends State<ChatPanel> {
     if (value.isEmpty) return;
     controller.sendChatMessage(value);
     _text.clear();
+    controller.chatInputChanged('');
     setState(() {});
   }
 
@@ -116,25 +131,40 @@ class _ChatPanelState extends State<ChatPanel> {
           Expanded(
             child: Obx(() {
               final messages = controller.chatMessages;
+              final typingNames = controller.typingUserNames;
               WidgetsBinding.instance.addPostFrameCallback(
                 (_) => _scrollToLatest(),
               );
-              if (messages.isEmpty) {
+              if (messages.isEmpty && typingNames.isEmpty) {
                 return _EmptyChat(coupleMode: coupleMode, accent: accent);
               }
               return ListView.builder(
                 controller: _scroll,
                 padding: const EdgeInsets.fromLTRB(12, 14, 12, 8),
-                itemCount: messages.length,
+                itemCount: messages.length + (typingNames.isEmpty ? 0 : 1),
                 itemBuilder: (context, index) {
+                  if (index == messages.length) {
+                    return _TypingIndicator(names: typingNames, accent: accent);
+                  }
                   final message = messages[index];
+                  final isMine =
+                      message['userId']?.toString() == controller.currentUserId;
+                  final previous = index > 0 ? messages[index - 1] : null;
+                  final next = index + 1 < messages.length
+                      ? messages[index + 1]
+                      : null;
+                  final followsSameSender =
+                      previous != null && _sameSender(previous, message);
+                  final hasSameSenderAfter =
+                      next != null && _sameSender(message, next);
                   return _MessageBubble(
                     message: message['message']?.toString() ?? '',
                     userName: message['userName']?.toString() ?? 'Unknown',
                     timestamp: message['timestamp']?.toString(),
-                    isMine:
-                        message['userId']?.toString() ==
-                        controller.currentUserId,
+                    isMine: isMine,
+                    followsSameSender: followsSameSender,
+                    hasSameSenderAfter: hasSameSenderAfter,
+                    showSenderIdentity: !isMine && !hasSameSenderAfter,
                     accent: accent,
                   );
                 },
@@ -156,7 +186,10 @@ class _ChatPanelState extends State<ChatPanel> {
                     maxLength: 500,
                     textCapitalization: TextCapitalization.sentences,
                     textInputAction: TextInputAction.newline,
-                    onChanged: (_) => setState(() {}),
+                    onChanged: (value) {
+                      controller.chatInputChanged(value);
+                      setState(() {});
+                    },
                     decoration: InputDecoration(
                       counterText: '',
                       hintText: coupleMode
@@ -198,6 +231,13 @@ class _ChatPanelState extends State<ChatPanel> {
         ],
       ),
     );
+  }
+
+  bool _sameSender(Map<String, dynamic> first, Map<String, dynamic> second) {
+    final firstId = first['userId']?.toString() ?? '';
+    final secondId = second['userId']?.toString() ?? '';
+    if (firstId.isNotEmpty && secondId.isNotEmpty) return firstId == secondId;
+    return first['userName']?.toString() == second['userName']?.toString();
   }
 }
 
@@ -244,6 +284,9 @@ class _MessageBubble extends StatelessWidget {
     required this.userName,
     required this.timestamp,
     required this.isMine,
+    required this.followsSameSender,
+    required this.hasSameSenderAfter,
+    required this.showSenderIdentity,
     required this.accent,
   });
 
@@ -251,6 +294,9 @@ class _MessageBubble extends StatelessWidget {
   final String userName;
   final String? timestamp;
   final bool isMine;
+  final bool followsSameSender;
+  final bool hasSameSenderAfter;
+  final bool showSenderIdentity;
   final Color accent;
 
   @override
@@ -260,7 +306,10 @@ class _MessageBubble extends StatelessWidget {
         ? ''
         : '${parsedTime.hour.toString().padLeft(2, '0')}:${parsedTime.minute.toString().padLeft(2, '0')}';
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
+      padding: EdgeInsets.only(
+        top: followsSameSender ? 0 : 4,
+        bottom: hasSameSenderAfter ? 3 : 10,
+      ),
       child: Row(
         mainAxisAlignment: isMine
             ? MainAxisAlignment.end
@@ -268,13 +317,18 @@ class _MessageBubble extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           if (!isMine) ...[
-            CircleAvatar(
-              radius: 13,
-              backgroundColor: accent.withValues(alpha: .2),
-              child: Text(
-                userName.isEmpty ? '?' : userName[0].toUpperCase(),
-                style: TextStyle(color: accent, fontSize: 11),
-              ),
+            SizedBox(
+              width: 26,
+              child: showSenderIdentity
+                  ? CircleAvatar(
+                      radius: 13,
+                      backgroundColor: accent.withValues(alpha: .2),
+                      child: Text(
+                        userName.isEmpty ? '?' : userName[0].toUpperCase(),
+                        style: TextStyle(color: accent, fontSize: 11),
+                      ),
+                    )
+                  : null,
             ),
             const SizedBox(width: 7),
           ],
@@ -284,7 +338,7 @@ class _MessageBubble extends StatelessWidget {
                   ? CrossAxisAlignment.end
                   : CrossAxisAlignment.start,
               children: [
-                if (!isMine)
+                if (showSenderIdentity)
                   Padding(
                     padding: const EdgeInsets.only(left: 4, bottom: 3),
                     child: Text(
@@ -306,15 +360,23 @@ class _MessageBubble extends StatelessWidget {
                         ? accent.withValues(alpha: .82)
                         : Colors.white.withValues(alpha: .08),
                     borderRadius: BorderRadius.only(
-                      topLeft: const Radius.circular(16),
-                      topRight: const Radius.circular(16),
-                      bottomLeft: Radius.circular(isMine ? 16 : 4),
-                      bottomRight: Radius.circular(isMine ? 4 : 16),
+                      topLeft: Radius.circular(
+                        !isMine && followsSameSender ? 5 : 16,
+                      ),
+                      topRight: Radius.circular(
+                        isMine && followsSameSender ? 5 : 16,
+                      ),
+                      bottomLeft: Radius.circular(
+                        !isMine && hasSameSenderAfter ? 5 : 16,
+                      ),
+                      bottomRight: Radius.circular(
+                        isMine && hasSameSenderAfter ? 5 : 16,
+                      ),
                     ),
                   ),
                   child: Text(message),
                 ),
-                if (timeLabel.isNotEmpty)
+                if (timeLabel.isNotEmpty && !hasSameSenderAfter)
                   Padding(
                     padding: const EdgeInsets.only(top: 3, left: 4, right: 4),
                     child: Text(
@@ -329,6 +391,93 @@ class _MessageBubble extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _TypingIndicator extends StatefulWidget {
+  const _TypingIndicator({required this.names, required this.accent});
+
+  final List<String> names;
+  final Color accent;
+
+  @override
+  State<_TypingIndicator> createState() => _TypingIndicatorState();
+}
+
+class _TypingIndicatorState extends State<_TypingIndicator>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _animation = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1100),
+  )..repeat();
+
+  @override
+  void dispose() {
+    _animation.dispose();
+    super.dispose();
+  }
+
+  String get _label {
+    if (widget.names.length == 1) return '${widget.names.first} is typing';
+    if (widget.names.length == 2) {
+      return '${widget.names.first} and ${widget.names.last} are typing';
+    }
+    return 'Several people are typing';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      liveRegion: true,
+      label: _label,
+      child: Padding(
+        padding: const EdgeInsets.only(left: 33, top: 2, bottom: 10),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: .08),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: AnimatedBuilder(
+                animation: _animation,
+                builder: (context, child) => Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: List.generate(3, (index) {
+                    final phase =
+                        (_animation.value - index * .14) * 2 * math.pi;
+                    final opacity = .25 + ((math.sin(phase) + 1) * .375);
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 2),
+                      child: Opacity(
+                        opacity: opacity,
+                        child: Container(
+                          width: 6,
+                          height: 6,
+                          decoration: BoxDecoration(
+                            color: widget.accent,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ),
+                    );
+                  }),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                _label,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: Colors.white54, fontSize: 11),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

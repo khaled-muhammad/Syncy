@@ -153,6 +153,7 @@ Connect to: `ws://localhost:8000/ws/room/{room_id}/`
 {
   "type": "message_type",
   "userId": "user-uuid",
+  "eventId": "event-uuid",
   "data": {
     // Message-specific data
   }
@@ -192,6 +193,39 @@ Connect to: `ws://localhost:8000/ws/room/{room_id}/`
     "videoUrl": "https://example.com/video.mp4",
     "videoTitle": "Video Title"
   }
+}
+```
+
+#### Chat
+```json
+{
+  "type": "chat",
+  "userId": "user-uuid",
+  "eventId": "event-uuid",
+  "data": {"message": "Hello"}
+}
+```
+
+#### Reaction
+```json
+{
+  "type": "reaction",
+  "userId": "user-uuid",
+  "eventId": "event-uuid",
+  "data": {"emoji": "🔥"}
+}
+```
+
+#### Typing state
+Typing state is ephemeral and is not added to room history. Clients should send
+`false` when the input is cleared, submitted, or loses focus.
+
+```json
+{
+  "type": "typing",
+  "userId": "user-uuid",
+  "eventId": "event-uuid",
+  "data": {"isTyping": true}
 }
 ```
 

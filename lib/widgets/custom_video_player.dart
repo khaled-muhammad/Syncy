@@ -1034,37 +1034,15 @@ class _FullScreenVideoPageState extends State<_FullScreenVideoPage> {
     final isPortraitVideo = widget.controller.value.aspectRatio < 1.0;
     final screenSize = MediaQuery.of(context).size;
 
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: Center(
-        child: isPortraitVideo
-            ? Container(
+    final videoSurface = isPortraitVideo
+        ? SizedBox(
+            width: screenSize.width,
+            height: screenSize.height,
+            child: FittedBox(
+              fit: BoxFit.contain,
+              child: SizedBox(
                 width: screenSize.width,
-                height: screenSize.height,
-                child: FittedBox(
-                  fit: BoxFit.contain,
-                  child: SizedBox(
-                    width: screenSize.width,
-                    height:
-                        screenSize.width / widget.controller.value.aspectRatio,
-                    child: Stack(
-                      children: [
-                        VideoPlayer(widget.controller),
-                        ControlsOverlay(
-                          controller: widget.controller,
-                          onPlayToggle: widget.onPlayToggle,
-                          onSeek: widget.onSeek,
-                        ),
-                        const Positioned.fill(
-                          child: ReactionOverlay(bottomInset: 88),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              )
-            : AspectRatio(
-                aspectRatio: widget.controller.value.aspectRatio,
+                height: screenSize.width / widget.controller.value.aspectRatio,
                 child: Stack(
                   children: [
                     VideoPlayer(widget.controller),
@@ -1073,12 +1051,41 @@ class _FullScreenVideoPageState extends State<_FullScreenVideoPage> {
                       onPlayToggle: widget.onPlayToggle,
                       onSeek: widget.onSeek,
                     ),
-                    const Positioned.fill(
-                      child: ReactionOverlay(bottomInset: 88),
-                    ),
                   ],
                 ),
               ),
+            ),
+          )
+        : AspectRatio(
+            aspectRatio: widget.controller.value.aspectRatio,
+            child: Stack(
+              children: [
+                VideoPlayer(widget.controller),
+                ControlsOverlay(
+                  controller: widget.controller,
+                  onPlayToggle: widget.onPlayToggle,
+                  onSeek: widget.onSeek,
+                ),
+              ],
+            ),
+          );
+
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          Center(child: videoSurface),
+          // Screen-level placement avoids clipping and FittedBox distortion.
+          const Positioned.fill(child: ReactionOverlay(bottomInset: 125)),
+          const SafeArea(
+            minimum: EdgeInsets.only(bottom: 70),
+            child: Align(
+              alignment: Alignment.bottomCenter,
+              child: ReactionBar(),
+            ),
+          ),
+        ],
       ),
     );
   }

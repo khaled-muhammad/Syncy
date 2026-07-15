@@ -85,6 +85,50 @@ class ReliableWebSocketTests(TransactionTestCase):
         async_to_sync(self._chat_reconnect_scenario)(event_id)
         self.assertEqual(Message.objects.filter(id=event_id).count(), 1)
 
+    def test_typing_and_reactions_are_broadcast_with_stable_event_identity(self):
+        async_to_sync(self._ephemeral_events_scenario)()
+        self.assertFalse(
+            Message.objects.filter(message_type__in=['typing', 'reaction']).exists()
+        )
+
+    async def _ephemeral_events_scenario(self):
+        socket = WebsocketCommunicator(
+            application, f'/ws/room/{self.room.id}/'
+        )
+        connected, _ = await socket.connect()
+        self.assertTrue(connected)
+        await socket.send_json_to(self.join_envelope())
+        await self.receive_types(socket, {'user_joined', 'room_update', 'ack'})
+
+        typing_id = str(uuid.uuid4())
+        await socket.send_json_to(
+            {
+                'type': 'typing',
+                'userId': str(self.user_id),
+                'eventId': typing_id,
+                'data': {'isTyping': True, 'userName': 'Spoofed'},
+            }
+        )
+        events = await self.receive_types(socket, {'typing', 'ack'})
+        self.assertEqual(events['typing']['eventId'], typing_id)
+        self.assertTrue(events['typing']['data']['isTyping'])
+        self.assertEqual(events['typing']['data']['userName'], 'Alice')
+
+        reaction_id = str(uuid.uuid4())
+        await socket.send_json_to(
+            {
+                'type': 'reaction',
+                'userId': str(self.user_id),
+                'eventId': reaction_id,
+                'data': {'emoji': '🔥', 'userName': 'Spoofed'},
+            }
+        )
+        events = await self.receive_types(socket, {'reaction', 'ack'})
+        self.assertEqual(events['reaction']['eventId'], reaction_id)
+        self.assertEqual(events['reaction']['data']['emoji'], '🔥')
+        self.assertEqual(events['reaction']['data']['userName'], 'Alice')
+        await socket.disconnect()
+
     def test_host_media_change_resets_and_broadcasts_room_state(self):
         async_to_sync(self._media_change_scenario)()
         self.room.refresh_from_db()

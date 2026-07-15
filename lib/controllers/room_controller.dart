@@ -49,6 +49,13 @@ class RoomController extends GetxController {
   // Floating reactions
   RxList<Map<String, dynamic>> floatingReactions = <Map<String, dynamic>>[].obs;
 
+  // Ephemeral remote typing state, keyed by sender ID.
+  final RxMap<String, String> typingUsers = <String, String>{}.obs;
+  final Map<String, Timer> _typingExpiryTimers = {};
+  Timer? _localTypingIdleTimer;
+  bool _localTypingActive = false;
+  DateTime? _lastTypingSignalAt;
+
   Rx<Room> room = Room(
     id: '',
     name: '',
@@ -88,7 +95,13 @@ class RoomController extends GetxController {
 
     wsService.setConnectionCallbacks(
       onConnected: () => syncStatus.value = 'Synced',
-      onDisconnected: () => syncStatus.value = 'Reconnecting…',
+      onDisconnected: () {
+        syncStatus.value = 'Reconnecting…';
+        _clearTypingUsers();
+        _localTypingIdleTimer?.cancel();
+        _localTypingActive = false;
+        _lastTypingSignalAt = null;
+      },
       onError: (_) {
         if (!wsService.isJoined.value) syncStatus.value = 'Reconnecting…';
       },
@@ -135,8 +148,39 @@ class RoomController extends GetxController {
         Future.delayed(const Duration(seconds: 3), () {
           floatingReactions.removeWhere((r) => r['id'] == reactionId);
         });
+      } else if (msg.type == MessageType.typing) {
+        _applyTypingState(msg);
       }
     });
+  }
+
+  List<String> get typingUserNames =>
+      typingUsers.values.toList(growable: false);
+
+  void _applyTypingState(Message message) {
+    final userId =
+        message.data['userId']?.toString() ?? message.userId.toString();
+    if (userId.isEmpty || userId == _uuid) return;
+
+    _typingExpiryTimers.remove(userId)?.cancel();
+    if (message.data['isTyping'] == true) {
+      typingUsers[userId] = message.data['userName']?.toString() ?? 'Someone';
+      // App suspension or network loss must not leave a stale indicator.
+      _typingExpiryTimers[userId] = Timer(const Duration(seconds: 4), () {
+        typingUsers.remove(userId);
+        _typingExpiryTimers.remove(userId);
+      });
+    } else {
+      typingUsers.remove(userId);
+    }
+  }
+
+  void _clearTypingUsers() {
+    for (final timer in _typingExpiryTimers.values) {
+      timer.cancel();
+    }
+    _typingExpiryTimers.clear();
+    typingUsers.clear();
   }
 
   void _applyRoomSnapshot(Map<String, dynamic> data) {
@@ -583,17 +627,16 @@ class RoomController extends GetxController {
         '/rooms/${room.value.id}/leave/',
         data: {'user_id': _uuid},
       );
-
+    } catch (_) {
+      // Local room state still needs to be released if transport cleanup fails.
+    } finally {
       users.clear();
       chatMessages.clear();
       floatingReactions.clear();
-      room.value = Room(
-        createdAt: DateTime.now(),
-        id: '',
-        name: '',
-        hostId: '',
-      );
-    } catch (e) {
+      _clearTypingUsers();
+      _localTypingIdleTimer?.cancel();
+      _localTypingActive = false;
+      _lastTypingSignalAt = null;
       room.value = Room(
         createdAt: DateTime.now(),
         id: '',
@@ -606,6 +649,7 @@ class RoomController extends GetxController {
   // Send chat message
   Future<void> sendChatMessage(String messageText) async {
     if (room.value.id == '' || messageText.trim().isEmpty) return;
+    stopTyping();
     await wsService.sendChat(
       room.value.id,
       _uuid,
@@ -618,5 +662,45 @@ class RoomController extends GetxController {
   Future<void> sendReaction(String emoji) async {
     if (room.value.id == '') return;
     await wsService.sendReaction(room.value.id, _uuid, user.name, emoji);
+  }
+
+  void chatInputChanged(String value) {
+    _localTypingIdleTimer?.cancel();
+    if (room.value.id.isEmpty || value.trim().isEmpty) {
+      stopTyping();
+      return;
+    }
+
+    final now = DateTime.now();
+    final shouldRefreshSignal =
+        _lastTypingSignalAt == null ||
+        now.difference(_lastTypingSignalAt!) >= const Duration(seconds: 1);
+    if (!_localTypingActive || shouldRefreshSignal) {
+      _localTypingActive = true;
+      _lastTypingSignalAt = now;
+      unawaited(wsService.sendTyping(room.value.id, _uuid, user.name, true));
+    }
+    _localTypingIdleTimer = Timer(
+      const Duration(milliseconds: 1800),
+      stopTyping,
+    );
+  }
+
+  void stopTyping() {
+    _localTypingIdleTimer?.cancel();
+    _localTypingIdleTimer = null;
+    if (!_localTypingActive) return;
+    _localTypingActive = false;
+    _lastTypingSignalAt = null;
+    if (room.value.id.isNotEmpty) {
+      unawaited(wsService.sendTyping(room.value.id, _uuid, user.name, false));
+    }
+  }
+
+  @override
+  void onClose() {
+    _localTypingIdleTimer?.cancel();
+    _clearTypingUsers();
+    super.onClose();
   }
 }

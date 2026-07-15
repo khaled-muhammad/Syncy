@@ -342,6 +342,25 @@ class ReliableWebSocketService extends GetxService {
     );
   }
 
+  Future<void> sendTyping(
+    String roomId,
+    String userId,
+    String userName,
+    bool isTyping,
+  ) async {
+    // Typing state is intentionally ephemeral: never queue stale indicators
+    // across reconnects.
+    if (!isJoined.value) return;
+    _sendNow(
+      Message.typing(
+        roomId: roomId,
+        userId: userId,
+        userName: userName,
+        isTyping: isTyping,
+      ),
+    );
+  }
+
   Future<void> leaveRoom(String roomId, String userId) async {
     _shouldReconnect = false;
     _reconnectTimer?.cancel();
