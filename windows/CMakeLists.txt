@@ -32,6 +32,16 @@ set(CMAKE_CXX_FLAGS_PROFILE "${CMAKE_CXX_FLAGS_RELEASE}")
 # Use Unicode for all projects.
 add_definitions(-DUNICODE -D_UNICODE)
 
+# MSVC 14.51+ (Visual Studio 2022 v18) promoted <experimental/coroutine> from a
+# deprecation warning to a hard static_assert error. Several endorsed plugins
+# (permission_handler_windows, window_manager, screen_retriever) use C++/WinRT
+# coroutines, which include that header in C++17 mode. Defining this before the
+# plugins are added restores the old opt-in-to-deprecated behavior for every
+# target below, so those plugins compile on the newest toolchain. Applied
+# globally rather than per-plugin because the plugin CMake files are generated
+# and cannot be edited here.
+add_compile_definitions(_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)
+
 # Compilation settings that should be applied to most targets.
 #
 # Be cautious about adding new options here, as plugins use this function by

@@ -27,8 +27,18 @@ class MediaDiscoveryService {
       }
     }
 
-    return _scanFileSystem(rootPath);
+    return scanDirectory(rootPath);
   }
+
+  /// Recursively collects supported video files under [rootPath].
+  ///
+  /// Desktop calls this directly, once per folder the user has chosen to
+  /// index, rather than going through [discoverVideoPaths] — there is no
+  /// platform media database to consult and no single device-wide root worth
+  /// scanning.
+  Future<List<String>> scanDirectory(String rootPath) => _scanFileSystem(
+    rootPath,
+  );
 
   List<String> _normalize(Iterable<String> paths) {
     final supported = videoExtensions.toSet();
@@ -88,6 +98,15 @@ class MediaDiscoveryService {
       '/.thumbnails',
       '/.cache',
       '/.tmp',
+      // Windows system locations. A user who points the picker at a whole
+      // drive should not pay to walk these, and most are unreadable anyway.
+      '/\$recycle.bin',
+      '/system volume information',
+      '/windows/',
+      '/program files',
+      '/programdata',
+      '/appdata/local/temp',
+      '/node_modules',
     ].any(normalized.contains);
   }
 }

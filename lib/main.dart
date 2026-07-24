@@ -1,16 +1,29 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:isar_community/isar.dart';
+import 'package:media_kit/media_kit.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:syncy/controllers/room_controller.dart';
+import 'package:syncy/services/lan/lan_host_service.dart';
 import 'package:syncy/models/media.dart';
 import 'package:syncy/models/user.dart';
 import 'package:syncy/routes/app_pages.dart';
 import 'package:syncy/services/thumbnail_service.dart';
 import 'package:syncy/theme/app_theme.dart';
+import 'package:syncy/utils/platform_utils.dart';
+import 'package:window_manager/window_manager.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  if (isDesktop) {
+    // Desktop playback and thumbnails both run on media_kit, so libmpv has to
+    // be loaded before anything constructs a Player.
+    MediaKit.ensureInitialized();
+    await _configureDesktopWindow();
+  }
 
   // Initialize Isar
   final dir = await getApplicationDocumentsDirectory();
@@ -28,7 +41,35 @@ void main() async {
   // disconnected controller while the portrait screen still has the old one.
   Get.put(RoomController(), permanent: true);
 
+  if (isDesktop) {
+    // The desktop can host its library on the LAN for paired phones to stream.
+    // Started after Isar so the server can read the indexed media immediately.
+    final host = LanHostService();
+    Get.put(host, permanent: true);
+    unawaited(host.start());
+  }
+
   runApp(const MyApp());
+}
+
+/// Gives the desktop build a real window: a comfortable default size and a
+/// floor below which the sidebar-plus-grid layout would start to break down.
+Future<void> _configureDesktopWindow() async {
+  await windowManager.ensureInitialized();
+
+  const options = WindowOptions(
+    size: Size(1280, 800),
+    minimumSize: Size(960, 640),
+    center: true,
+    title: 'Syncy',
+    backgroundColor: Color(0xFF090512),
+    titleBarStyle: TitleBarStyle.normal,
+  );
+
+  await windowManager.waitUntilReadyToShow(options, () async {
+    await windowManager.show();
+    await windowManager.focus();
+  });
 }
 
 class MyApp extends StatelessWidget {

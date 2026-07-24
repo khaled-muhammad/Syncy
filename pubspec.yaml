@@ -54,6 +54,27 @@ dependencies:
   isar_community_flutter_libs: ^3.3.0
   panara_dialogs: ^0.1.5
 
+  # Desktop playback. video_player has no Windows implementation, so Windows
+  # runs on media_kit (libmpv) behind the SyncPlayer abstraction while mobile
+  # keeps video_player. media_kit_libs_windows_video is deliberately used
+  # instead of media_kit_libs_video so libmpv is not bundled into the
+  # Android/iOS builds.
+  media_kit: ^1.2.6
+  media_kit_video: ^2.0.1
+  media_kit_libs_windows_video: ^1.0.11
+  window_manager: ^0.5.2
+  # Desktop file/folder pickers. file_picker's Windows dialogs are hand-rolled
+  # comdlg32 FFI and access-violate on this toolchain; file_selector ships a
+  # proper C++ plugin, so desktop picking routes through it instead. Mobile
+  # keeps file_picker.
+  file_selector: ^1.0.3
+
+  # LAN media host. The desktop app serves its library over HTTP so paired
+  # phones can stream it; shelf is a pure-Dart server (no native code, so the
+  # mobile bundle is unaffected). Discovery and range streaming use dart:io.
+  shelf: ^1.4.0
+  shelf_router: ^1.1.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -114,3 +135,11 @@ flutter_launcher_icons:
   ios: true
   image_path: "assets/icon/app_icon.png"
   min_sdk_android: 21
+  # Regenerates windows/runner/resources/app_icon.ico from the same source
+  # art. Without this block the Windows build keeps shipping the default
+  # Flutter template icon. icon_size 256 produces a crisp high-DPI taskbar
+  # entry. Run `dart run flutter_launcher_icons` after changing the source.
+  windows:
+    generate: true
+    image_path: "assets/icon/app_icon.png"
+    icon_size: 256

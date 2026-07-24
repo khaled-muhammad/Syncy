@@ -8,13 +8,16 @@ import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:icons_plus/icons_plus.dart';
 import 'package:syncy/controllers/home_controller.dart';
+import 'package:syncy/controllers/library_controller.dart';
 import 'package:syncy/controllers/room_controller.dart';
 import 'package:syncy/screens/search/seach_screen.dart';
+import 'package:syncy/widgets/adaptive_sheet.dart';
 import 'package:syncy/widgets/enhanced_chat_panel.dart';
 import 'package:syncy/widgets/custom_video_player.dart';
 import 'package:syncy/widgets/reliable_reaction_overlay.dart';
 import 'package:syncy/widgets/native_purple_mesh_background.dart';
-import 'package:video_player/video_player.dart';
+import 'package:syncy/services/player/sync_player_factory.dart';
+import 'package:syncy/utils/platform_utils.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 class RoomScreen extends StatefulWidget {
@@ -26,6 +29,7 @@ class RoomScreen extends StatefulWidget {
 
 class _RoomScreenState extends State<RoomScreen> {
   final RoomController controller = Get.find<RoomController>();
+  Worker? _streamWorker;
 
   @override
   void initState() {
@@ -37,6 +41,15 @@ class _RoomScreenState extends State<RoomScreen> {
     if (controller.room.value.currentVideoUrl != null) {
       setupPlayer();
     }
+
+    // When the host switches to (or a joiner receives) a LAN stream URL after
+    // the screen is already open, re-open the player against it.
+    _streamWorker = ever(controller.pendingStreamUrl, (String? url) {
+      if (url != null && url.isNotEmpty) {
+        controller.pendingStreamUrl.value = null;
+        setupPlayer();
+      }
+    });
   }
 
   void exitPop() {
@@ -63,16 +76,27 @@ class _RoomScreenState extends State<RoomScreen> {
     if (path == null || path.isEmpty) return;
     controller.beginMediaLoad('Opening media…');
     final previous = controller.videoController;
-    final player = VideoPlayerController.file(
-      File(path),
-      videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
-    );
+    // A LAN-hosted video arrives as an http(s) URL (streamed from a paired
+    // PC); anything else is a local file path on this device.
+    final isNetwork = path.startsWith('http://') || path.startsWith('https://');
+    final player = isNetwork
+        ? createSyncPlayerFromUrl(path)
+        : createSyncPlayer(File(path));
     controller.videoController = player;
     if (mounted) setState(() {});
-    await previous?.dispose();
+    previous?.dispose();
 
     player.addListener(() {
-      if (mounted && controller.videoController == player) setState(() {});
+      if (!mounted || controller.videoController != player) return;
+      // A stream that drops after it was already playing (host slept, phone
+      // left Wi-Fi) surfaces as an error on the value; reflect it so the
+      // overlay offers a retry rather than silently freezing.
+      if (player.value.hasError && controller.mediaLoadError.value == null) {
+        controller.failMediaLoad(
+          player.value.errorDescription ?? 'stream error',
+        );
+      }
+      setState(() {});
     });
     try {
       await player.initialize();
@@ -86,9 +110,15 @@ class _RoomScreenState extends State<RoomScreen> {
   }
 
   void _chooseMedia() {
+    // The two form factors keep their libraries in different controllers:
+    // desktop indexes user-chosen folders, mobile scans the device.
+    final library = isDesktop
+        ? Get.find<LibraryController>().visibleMedia
+        : Get.find<HomeController>().media;
+
     Get.to(
       () => SearchScreen(
-        media: Get.find<HomeController>().media,
+        media: library,
         onSelect: (selectedMedia) {
           controller.setMedia(selectedMedia);
           setupPlayer();
@@ -102,6 +132,7 @@ class _RoomScreenState extends State<RoomScreen> {
     // Disable wake lock when leaving the room
     WakelockPlus.disable();
 
+    _streamWorker?.dispose();
     controller.videoController?.dispose();
     controller.videoController = null;
     unawaited(controller.leaveRoom());
@@ -140,7 +171,7 @@ class _RoomScreenState extends State<RoomScreen> {
                 ),
                 IconButton(
                   onPressed: () {
-                    Get.bottomSheet(
+                    showAdaptiveSheet(
                       ClipRRect(
                         child: BackdropFilter(
                           filter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
@@ -208,128 +239,10 @@ class _RoomScreenState extends State<RoomScreen> {
                       MediaQuery.of(context).viewInsets.bottom > 0;
                   return Stack(
                     children: [
-                      SingleChildScrollView(
-                        child: Column(
-                          children: [
-                            controller.videoController != null
-                                ? Container(
-                                    constraints: BoxConstraints(
-                                      maxHeight:
-                                          MediaQuery.of(context).size.height *
-                                          0.4,
-                                    ),
-                                    alignment: Alignment.center,
-                                    child: AspectRatio(
-                                      aspectRatio: controller
-                                          .videoController!
-                                          .value
-                                          .aspectRatio,
-                                      child: Stack(
-                                        children: [
-                                          VideoPlayer(
-                                            controller.videoController!,
-                                          ),
-                                          ControlsOverlay(
-                                            controller:
-                                                controller.videoController!,
-                                            roomController: controller,
-                                            onPlayToggle: (isPlaying) {
-                                              if (isPlaying) {
-                                                controller.playVideo();
-                                              } else {
-                                                controller.pauseVideo();
-                                              }
-                                            },
-                                            onSeek: (position) {
-                                              controller.seekVideo(position);
-                                            },
-                                          ),
-                                          Positioned.fill(
-                                            child: _MediaStatusOverlay(
-                                              onChooseMedia: _chooseMedia,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  )
-                                : Center(
-                                    child: Container(
-                                      decoration: BoxDecoration(
-                                        gradient: const LinearGradient(
-                                          colors: [
-                                            Color(0xFF8E2DE2),
-                                            Color(0xFF4A00E0),
-                                          ],
-                                          begin: Alignment.topLeft,
-                                          end: Alignment.bottomRight,
-                                        ),
-                                        borderRadius: BorderRadius.circular(30),
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: Colors.purple.withValues(
-                                              alpha: 0.4,
-                                            ),
-                                            blurRadius: 20,
-                                            offset: const Offset(0, 10),
-                                          ),
-                                        ],
-                                      ),
-                                      child: ElevatedButton(
-                                        onPressed: _chooseMedia,
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: Colors.transparent,
-                                          shadowColor: Colors.transparent,
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 32,
-                                            vertical: 18,
-                                          ),
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(
-                                              30,
-                                            ),
-                                          ),
-                                          textStyle: const TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.bold,
-                                            letterSpacing: 1.1,
-                                          ),
-                                        ),
-                                        child: Text(
-                                          controller
-                                                      .room
-                                                      .value
-                                                      .currentVideoTitle ==
-                                                  null
-                                              ? 'Choose Media'
-                                              : 'Choose Matching Media',
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                            // Reaction bar - hidden when keyboard is open
-                            if (!keyboardOpen) ...[
-                              const SizedBox(height: 12),
-                              ReactionBar(controller: controller),
-                            ],
-                            const SizedBox(height: 12),
-                            // Chat panel with fixed height
-                            SizedBox(
-                              height: keyboardOpen
-                                  ? MediaQuery.of(context).size.height * 0.4
-                                  : MediaQuery.of(context).size.height * 0.45,
-                              child: const Padding(
-                                padding: EdgeInsets.symmetric(horizontal: 12),
-                                child: ChatPanel(),
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                          ],
-                        ),
-                      ),
+                      if (isDesktop)
+                        _buildDesktopBody()
+                      else
+                        _buildMobileBody(context, keyboardOpen),
                       // Floating reactions overlay
                       ReactionOverlay(controller: controller),
                     ],
@@ -339,6 +252,156 @@ class _RoomScreenState extends State<RoomScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  /// Phone layout: video, reactions, and chat stacked in one scroll view.
+  Widget _buildMobileBody(BuildContext context, bool keyboardOpen) {
+    final screenHeight = MediaQuery.of(context).size.height;
+
+    return SingleChildScrollView(
+      child: Column(
+        children: [
+          controller.videoController != null
+              ? Container(
+                  constraints: BoxConstraints(maxHeight: screenHeight * 0.4),
+                  alignment: Alignment.center,
+                  child: _buildStage(),
+                )
+              : Center(child: _buildChooseMediaButton()),
+          // Reaction bar - hidden when keyboard is open
+          if (!keyboardOpen) ...[
+            const SizedBox(height: 12),
+            ReactionBar(controller: controller),
+          ],
+          const SizedBox(height: 12),
+          // Chat panel with fixed height
+          SizedBox(
+            height: keyboardOpen ? screenHeight * 0.4 : screenHeight * 0.45,
+            child: const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 12),
+              child: ChatPanel(),
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
+      ),
+    );
+  }
+
+  /// Desktop layout: the video takes the window, chat sits alongside it.
+  ///
+  /// The phone's 40%-height cap and vertical stacking exist because a portrait
+  /// screen has no room for both. A desktop window does, so the video is given
+  /// all the space left over instead of being boxed into a strip.
+  Widget _buildDesktopBody() {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(
+          child: Column(
+            children: [
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+                  child: Center(
+                    child: controller.videoController != null
+                        ? _buildStage()
+                        : _buildChooseMediaButton(),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: ReactionBar(controller: controller),
+              ),
+            ],
+          ),
+        ),
+        SizedBox(
+          width: 360,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(4, 8, 12, 12),
+            child: const ChatPanel(),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// The video surface with Syncy's controls and load-status overlay on top.
+  Widget _buildStage() {
+    final player = controller.videoController!;
+
+    return AspectRatio(
+      aspectRatio: player.value.aspectRatio,
+      child: Stack(
+        children: [
+          player.buildSurface(),
+          ControlsOverlay(
+            controller: player,
+            roomController: controller,
+            onPlayToggle: (isPlaying) {
+              if (isPlaying) {
+                controller.playVideo();
+              } else {
+                controller.pauseVideo();
+              }
+            },
+            onSeek: (position) {
+              controller.seekVideo(position);
+            },
+          ),
+          Positioned.fill(
+            child: _MediaStatusOverlay(
+              onChooseMedia: _chooseMedia,
+              onRetry: setupPlayer,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildChooseMediaButton() {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF8E2DE2), Color(0xFF4A00E0)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(30),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.purple.withValues(alpha: 0.4),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: ElevatedButton(
+        onPressed: _chooseMedia,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.transparent,
+          shadowColor: Colors.transparent,
+          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 18),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(30),
+          ),
+          textStyle: const TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 1.1,
+          ),
+        ),
+        child: Text(
+          controller.room.value.currentVideoTitle == null
+              ? 'Choose Media'
+              : 'Choose Matching Media',
+          style: const TextStyle(color: Colors.white),
+        ),
       ),
     );
   }
@@ -386,9 +449,13 @@ class _SyncStatusPill extends StatelessWidget {
 }
 
 class _MediaStatusOverlay extends StatelessWidget {
-  const _MediaStatusOverlay({required this.onChooseMedia});
+  const _MediaStatusOverlay({
+    required this.onChooseMedia,
+    required this.onRetry,
+  });
 
   final VoidCallback onChooseMedia;
+  final VoidCallback onRetry;
 
   @override
   Widget build(BuildContext context) {
@@ -397,6 +464,7 @@ class _MediaStatusOverlay extends StatelessWidget {
       final loading = controller.isMediaLoading.value;
       final error = controller.mediaLoadError.value;
       final requiresMedia = controller.requiresMediaSelection.value;
+      final canRetry = error != null && controller.isStreamingMedia;
       if (!loading && error == null && !requiresMedia) {
         return const SizedBox.shrink();
       }
@@ -432,6 +500,13 @@ class _MediaStatusOverlay extends StatelessWidget {
                     'Preparing playback and matching the room position',
                     textAlign: TextAlign.center,
                     style: TextStyle(color: Colors.white60, fontSize: 12),
+                  ),
+                ] else if (canRetry) ...[
+                  const SizedBox(height: 12),
+                  FilledButton.icon(
+                    onPressed: onRetry,
+                    icon: const Icon(Icons.refresh_rounded),
+                    label: const Text('Retry'),
                   ),
                 ] else if (requiresMedia) ...[
                   const SizedBox(height: 12),

@@ -5,13 +5,31 @@ import 'package:icons_plus/icons_plus.dart';
 import 'package:syncy/bottomsheets/create_room_bottom_sheet.dart';
 import 'package:syncy/bottomsheets/join_room_bottom_sheet.dart';
 import 'package:syncy/controllers/home_controller.dart';
+import 'package:syncy/screens/home/desktop_home_screen.dart';
+import 'package:syncy/screens/lan/connect_pc_screen.dart';
 import 'package:syncy/screens/search/seach_screen.dart';
+import 'package:syncy/utils/platform_utils.dart';
+import 'package:syncy/widgets/adaptive_sheet.dart';
 import 'package:syncy/widgets/floating_navbar.dart';
 import 'package:syncy/widgets/media_card.dart';
 import 'package:syncy/widgets/native_purple_mesh_background.dart';
 
-class HomeScreen extends GetView<HomeController> {
+/// Entry screen for both form factors.
+///
+/// Desktop and mobile browse fundamentally different libraries — curated
+/// folders versus a device-wide scan — so they get separate screens and
+/// separate controllers rather than one widget tree full of platform checks.
+class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return isDesktop ? const DesktopHomeScreen() : const _MobileHomeScreen();
+  }
+}
+
+class _MobileHomeScreen extends GetView<HomeController> {
+  const _MobileHomeScreen();
 
   @override
   Widget build(BuildContext context) {
@@ -79,8 +97,15 @@ class HomeScreen extends GetView<HomeController> {
                               label: "Join",
                               onPressed: () {
                                 controller.activeIndex.value = 1;
-                                Get.bottomSheet(JoinRoomBottomSheet());
+                                showAdaptiveSheet(const JoinRoomBottomSheet());
                               },
+                            ),
+                            NavItem(
+                              icon: IonIcons.desktop,
+                              label: "PC",
+                              onPressed: () => Get.to(
+                                () => const ConnectPcScreen(),
+                              ),
                             ),
                           ],
                         ),
@@ -214,8 +239,9 @@ class HomeScreen extends GetView<HomeController> {
             return MediaCard(
               mediaElement: mediaElement,
               isAudio: false, // update this when audio support is added
-              onPressed: () =>
-                  Get.bottomSheet(CreateRoomBottomSheet(media: mediaElement)),
+              onPressed: () => showAdaptiveSheet(
+                CreateRoomBottomSheet(media: mediaElement),
+              ),
             );
           },
         ),

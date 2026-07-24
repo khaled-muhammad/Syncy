@@ -140,10 +140,15 @@ class ReliableSyncPlayConsumer(AsyncWebsocketConsumer):
         if not self.user.is_host:
             await self.send_error('Only the host can change media')
             return
-        title = str((data.get('data') or {}).get('videoTitle') or '').strip()
+        payload = data.get('data') or {}
+        title = str(payload.get('videoTitle') or '').strip()
         if not title:
             raise ValueError('Media title cannot be empty')
-        state, applied = await self.commit_video_change(title, data)
+        # A LAN-hosted room carries a playable stream URL so joiners can watch
+        # without the file. A classic local-file room leaves this empty and
+        # each peer supplies their own copy.
+        video_url = str(payload.get('videoUrl') or '').strip() or None
+        state, applied = await self.commit_video_change(title, video_url, data)
         if applied:
             await self.channel_layer.group_send(
                 self.room_group_name,
@@ -388,13 +393,13 @@ class ReliableSyncPlayConsumer(AsyncWebsocketConsumer):
             return room.to_dict(), True
 
     @database_sync_to_async
-    def commit_video_change(self, title, envelope):
+    def commit_video_change(self, title, video_url, envelope):
         with transaction.atomic():
             room = Room.objects.select_for_update().get(id=self.room.id)
             event_id = self.parse_event_id(envelope)
             if event_id and Message.objects.filter(id=event_id, room=room).exists():
                 return room.to_dict(), False
-            room.current_video_url = None
+            room.current_video_url = video_url
             room.current_video_title = title
             room.current_position = timedelta(0)
             room.is_playing = False
@@ -410,7 +415,11 @@ class ReliableSyncPlayConsumer(AsyncWebsocketConsumer):
                 room=room,
                 user_id=self.user_id,
                 message_type='video_changed',
-                data={'videoTitle': title, 'revision': room.playback_revision},
+                data={
+                    'videoTitle': title,
+                    'videoUrl': video_url,
+                    'revision': room.playback_revision,
+                },
             )
             self.room = room
             return room.to_dict(), True

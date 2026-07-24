@@ -6,6 +6,7 @@ import 'package:isar_community/isar.dart';
 import 'package:syncy/controllers/room_controller.dart';
 import 'package:syncy/models/user.dart';
 import 'package:syncy/routes/app_routes.dart';
+import 'package:syncy/utils/platform_utils.dart';
 import 'package:syncy/widgets/modern_input.dart';
 
 class JoinRoomBottomSheet extends StatefulWidget {
@@ -76,10 +77,14 @@ class _JoinRoomBottomSheetState extends State<JoinRoomBottomSheet> {
           width: double.infinity,
           decoration: BoxDecoration(
             color: Colors.purple.withAlpha(100),
-            borderRadius: BorderRadius.only(
-              topLeft: Radius.circular(26),
-              topRight: Radius.circular(26),
-            ),
+            // A bottom sheet only rounds the edge it slides away from; inside
+            // a desktop dialog the same shape needs all four corners.
+            borderRadius: isDesktop
+                ? BorderRadius.circular(20)
+                : const BorderRadius.only(
+                    topLeft: Radius.circular(26),
+                    topRight: Radius.circular(26),
+                  ),
           ),
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),

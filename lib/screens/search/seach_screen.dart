@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:syncy/bottomsheets/create_room_bottom_sheet.dart';
 import 'package:syncy/models/media.dart';
+import 'package:syncy/utils/platform_utils.dart';
+import 'package:syncy/widgets/adaptive_sheet.dart';
 import 'package:syncy/widgets/media_card.dart';
 import 'package:syncy/widgets/modern_input.dart';
 import 'package:syncy/widgets/native_purple_mesh_background.dart';
@@ -286,13 +288,22 @@ class _SearchScreenState extends State<SearchScreen> {
                           : GridView.builder(
                               itemCount: filteredMedia.length,
                               padding: const EdgeInsets.only(bottom: 100),
-                              gridDelegate:
-                                  SliverGridDelegateWithFixedCrossAxisCount(
-                                    crossAxisCount: 2,
-                                    crossAxisSpacing: 20,
-                                    mainAxisSpacing: 25,
-                                    childAspectRatio: 3 / 5,
-                                  ),
+                              // Two columns fill a phone, but would leave a
+                              // desktop window mostly empty with enormous
+                              // cards, so desktop sizes by extent instead.
+                              gridDelegate: isDesktop
+                                  ? const SliverGridDelegateWithMaxCrossAxisExtent(
+                                      maxCrossAxisExtent: 260,
+                                      crossAxisSpacing: 20,
+                                      mainAxisSpacing: 24,
+                                      childAspectRatio: 3 / 4,
+                                    )
+                                  : const SliverGridDelegateWithFixedCrossAxisCount(
+                                      crossAxisCount: 2,
+                                      crossAxisSpacing: 20,
+                                      mainAxisSpacing: 25,
+                                      childAspectRatio: 3 / 5,
+                                    ),
                               itemBuilder: (context, index) {
                                 final mediaElement = filteredMedia[index];
                                 return MediaCard(
@@ -303,7 +314,7 @@ class _SearchScreenState extends State<SearchScreen> {
                                       Get.back();
                                     } else {
                                       // Show create room dialog when searching from home
-                                      Get.bottomSheet(
+                                      showAdaptiveSheet(
                                         CreateRoomBottomSheet(
                                           media: mediaElement,
                                         ),

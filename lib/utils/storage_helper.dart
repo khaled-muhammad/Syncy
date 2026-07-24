@@ -23,6 +23,11 @@ class StorageHelper {
   }
 
   static Future<bool> checkManageExternalStoragePermission() async {
+    // MANAGE_EXTERNAL_STORAGE is an Android permission. Requesting it anywhere
+    // else resolves to denied and would gate the whole library behind a
+    // permission prompt the user can never satisfy.
+    if (!Platform.isAndroid) return true;
+
     var status = await Permission.manageExternalStorage.status;
     if (status.isGranted) {
       return true;

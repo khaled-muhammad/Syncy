@@ -3,16 +3,26 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:isar_community/isar.dart';
+import 'package:syncy/controllers/lan_controller.dart';
 import 'package:syncy/controllers/room_controller.dart';
 import 'package:syncy/models/media.dart';
+import 'package:syncy/models/remote_media.dart';
 import 'package:syncy/models/room.dart';
 import 'package:syncy/models/user.dart';
+import 'package:syncy/services/lan/lan_host_service.dart';
+import 'package:syncy/utils/platform_utils.dart';
 import 'package:syncy/widgets/modern_input.dart';
 
 class CreateRoomBottomSheet extends StatefulWidget {
-  final Media media;
+  /// Local media on this device (mobile scan / desktop library).
+  final Media? media;
 
-  const CreateRoomBottomSheet({super.key, required this.media});
+  /// Media hosted on a paired PC, streamed over the LAN. Exactly one of
+  /// [media] / [remoteMedia] is set.
+  final RemoteMedia? remoteMedia;
+
+  const CreateRoomBottomSheet({super.key, this.media, this.remoteMedia})
+    : assert(media != null || remoteMedia != null);
 
   @override
   State<CreateRoomBottomSheet> createState() => _CreateRoomBottomSheetState();
@@ -24,6 +34,60 @@ class _CreateRoomBottomSheetState extends State<CreateRoomBottomSheet> {
   final isar = Get.find<Isar>();
   late User user;
   RoomMode _roomMode = RoomMode.friends;
+  bool _creating = false;
+
+  Future<void> _create() async {
+    final roomName = _roomNameController.text.trim();
+    if (roomName.isEmpty) return;
+
+    // Remote media (phone → PC library): resolve a LAN stream URL from the
+    // paired PC and create the room around it.
+    if (widget.remoteMedia != null) {
+      setState(() => _creating = true);
+      final error = await Get.find<LanController>().createRoomFromRemote(
+        widget.remoteMedia!,
+        roomName,
+        _roomMode,
+      );
+      if (!mounted) return;
+      setState(() => _creating = false);
+      if (error != null) {
+        Get.snackbar('Could not create room', error);
+      }
+      return;
+    }
+
+    final media = widget.media!;
+    // Desktop host: if the LAN host is running, publish this local file as a
+    // stream URL so phones can join and watch without a copy (Case B). The
+    // host streams from its own address; everyone in the room shares one URL.
+    final streamUrl = _hostStreamUrl(media);
+    if (streamUrl != null) {
+      Get.find<RoomController>().createRoom(
+        roomName,
+        streamUrl: streamUrl,
+        streamTitle: media.name,
+        mode: _roomMode,
+      );
+      return;
+    }
+
+    Get.find<RoomController>().createRoom(
+      roomName,
+      mediaItem: media,
+      mode: _roomMode,
+    );
+  }
+
+  /// The LAN stream URL for a locally-owned [media] when this device is hosting
+  /// on the network, or null when it is not (mobile, or host not running).
+  String? _hostStreamUrl(Media media) {
+    if (!isDesktop || !Get.isRegistered<LanHostService>()) return null;
+    final host = LanHostService.to;
+    if (!host.isRunning.value) return null;
+    return host.streamUrlForMedia(media.id);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -50,10 +114,14 @@ class _CreateRoomBottomSheetState extends State<CreateRoomBottomSheet> {
           width: double.infinity,
           decoration: BoxDecoration(
             color: Colors.purple.withAlpha(100),
-            borderRadius: BorderRadius.only(
-              topLeft: Radius.circular(26),
-              topRight: Radius.circular(26),
-            ),
+            // A bottom sheet only rounds the edge it slides away from; inside
+            // a desktop dialog the same shape needs all four corners.
+            borderRadius: isDesktop
+                ? BorderRadius.circular(20)
+                : const BorderRadius.only(
+                    topLeft: Radius.circular(26),
+                    topRight: Radius.circular(26),
+                  ),
           ),
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
@@ -113,15 +181,9 @@ class _CreateRoomBottomSheetState extends State<CreateRoomBottomSheet> {
                 ),
                 const SizedBox(height: 20),
                 ElevatedButton.icon(
-                  onPressed: _roomNameController.text.trim().isEmpty
+                  onPressed: _roomNameController.text.trim().isEmpty || _creating
                       ? null
-                      : () {
-                          Get.find<RoomController>().createRoom(
-                            _roomNameController.text.trim(),
-                            mediaItem: widget.media,
-                            mode: _roomMode,
-                          );
-                        },
+                      : _create,
                   icon: const Icon(Icons.start_rounded, color: Colors.white),
                   label: const Text(
                     "Create",

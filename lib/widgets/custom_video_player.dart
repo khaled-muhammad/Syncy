@@ -4,10 +4,12 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:icons_plus/icons_plus.dart';
-import 'package:video_player/video_player.dart';
 import 'package:syncy/controllers/room_controller.dart';
+import 'package:syncy/services/player/sync_player.dart';
+import 'package:syncy/utils/platform_utils.dart';
 import 'package:syncy/widgets/reliable_reaction_overlay.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
+import 'package:window_manager/window_manager.dart';
 
 // Add subtitle model
 class SubtitleItem {
@@ -27,7 +29,7 @@ class ControlsOverlay extends StatefulWidget {
     this.onSeek,
   });
 
-  final VideoPlayerController controller;
+  final SyncPlayer controller;
   final RoomController roomController;
   final Function(bool isPlaying)? onPlayToggle;
   final Function(Duration position)? onSeek;
@@ -499,6 +501,12 @@ class ControlsOverlayState extends State<ControlsOverlay> {
     final isInFullScreen =
         ModalRoute.of(context)?.settings.name == '_FullScreenVideoPage';
 
+    // On desktop the route alone only fills the app window; the window itself
+    // has to be told to go fullscreen too.
+    if (isDesktop) {
+      unawaited(windowManager.setFullScreen(!isInFullScreen));
+    }
+
     if (isInFullScreen) {
       // If already in fullscreen, pop to exit
       Navigator.of(context).pop();
@@ -592,6 +600,66 @@ class ControlsOverlayState extends State<ControlsOverlay> {
 
   @override
   Widget build(BuildContext context) {
+    final overlay = _buildOverlayStack();
+    if (!isDesktop) return overlay;
+
+    // Desktop expects hover to reveal controls and the keyboard to drive
+    // playback; the touch gestures underneath stay active either way.
+    return MouseRegion(
+      onEnter: (_) => _showControls(),
+      onHover: (_) {
+        if (!_controlsVisible) {
+          _showControls();
+        } else {
+          _resetHideTimer();
+        }
+      },
+      onExit: (_) => _hideControls(),
+      child: Focus(
+        autofocus: true,
+        onKeyEvent: _handleKeyEvent,
+        child: overlay,
+      ),
+    );
+  }
+
+  /// Routes desktop key presses through the same handlers the on-screen
+  /// controls use, so keyboard actions broadcast to the room identically.
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+
+    switch (event.logicalKey) {
+      case LogicalKeyboardKey.space:
+      case LogicalKeyboardKey.mediaPlayPause:
+        _showControls();
+        _togglePlayPause();
+        return KeyEventResult.handled;
+      case LogicalKeyboardKey.arrowLeft:
+        _showControls();
+        _seekBy(const Duration(seconds: -10));
+        return KeyEventResult.handled;
+      case LogicalKeyboardKey.arrowRight:
+        _showControls();
+        _seekBy(const Duration(seconds: 10));
+        return KeyEventResult.handled;
+      case LogicalKeyboardKey.keyF:
+        _toggleFullScreen();
+        return KeyEventResult.handled;
+      case LogicalKeyboardKey.escape:
+        // Escape only leaves fullscreen; it must not close the room.
+        if (ModalRoute.of(context)?.settings.name == '_FullScreenVideoPage') {
+          _toggleFullScreen();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      default:
+        return KeyEventResult.ignored;
+    }
+  }
+
+  Widget _buildOverlayStack() {
     return Stack(
       children: <Widget>[
         // Base interaction layer: a single full-area detector. A single tap
@@ -966,7 +1034,7 @@ class ControlsOverlayState extends State<ControlsOverlay> {
 }
 
 class _FullScreenVideoPage extends StatefulWidget {
-  final VideoPlayerController controller;
+  final SyncPlayer controller;
   final RoomController roomController;
   final Function(bool)? onPlayToggle;
   final Function(Duration)? onSeek;
@@ -992,24 +1060,30 @@ class _FullScreenVideoPageState extends State<_FullScreenVideoPage> {
   @override
   void initState() {
     super.initState();
-    // Hide system UI and set orientation based on video aspect ratio
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
 
     // Enable wake lock for fullscreen video
     WakelockPlus.enable();
 
-    // Check if video is portrait or landscape
-    final isPortraitVideo = widget.controller.value.aspectRatio < 1.0;
+    // System UI modes and orientation locks are mobile concepts — on desktop
+    // the window manager owns fullscreen, and rotating a monitor is not a
+    // thing. _toggleFullScreen has already resized the window by this point.
+    if (!isDesktop) {
+      // Hide system UI and set orientation based on video aspect ratio
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
 
-    if (isPortraitVideo) {
-      // For portrait videos, use portrait orientation
-      SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
-    } else {
-      // For landscape videos, use landscape orientation
-      SystemChrome.setPreferredOrientations([
-        DeviceOrientation.landscapeLeft,
-        DeviceOrientation.landscapeRight,
-      ]);
+      // Check if video is portrait or landscape
+      final isPortraitVideo = widget.controller.value.aspectRatio < 1.0;
+
+      if (isPortraitVideo) {
+        // For portrait videos, use portrait orientation
+        SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+      } else {
+        // For landscape videos, use landscape orientation
+        SystemChrome.setPreferredOrientations([
+          DeviceOrientation.landscapeLeft,
+          DeviceOrientation.landscapeRight,
+        ]);
+      }
     }
 
     // Add listener to update state on controller changes
@@ -1081,9 +1155,15 @@ class _FullScreenVideoPageState extends State<_FullScreenVideoPage> {
     _reactionDockTimer?.cancel();
     // Remove the listener
     widget.controller.removeListener(_videoListener);
-    // Restore system UI and orientation
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-    SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+    if (isDesktop) {
+      // Leaving this route by any path — Escape, the button, or a system back
+      // gesture — must return the window to its normal size.
+      unawaited(windowManager.setFullScreen(false));
+    } else {
+      // Restore system UI and orientation
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+      SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+    }
 
     // Disable wake lock when exiting fullscreen
     WakelockPlus.disable();
@@ -1107,7 +1187,7 @@ class _FullScreenVideoPageState extends State<_FullScreenVideoPage> {
                 height: screenSize.width / widget.controller.value.aspectRatio,
                 child: Stack(
                   children: [
-                    VideoPlayer(widget.controller),
+                    widget.controller.buildSurface(),
                     ControlsOverlay(
                       controller: widget.controller,
                       roomController: widget.roomController,
@@ -1123,7 +1203,7 @@ class _FullScreenVideoPageState extends State<_FullScreenVideoPage> {
             aspectRatio: widget.controller.value.aspectRatio,
             child: Stack(
               children: [
-                VideoPlayer(widget.controller),
+                widget.controller.buildSurface(),
                 ControlsOverlay(
                   controller: widget.controller,
                   roomController: widget.roomController,

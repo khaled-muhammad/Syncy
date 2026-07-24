@@ -1,13 +1,17 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:isolate';
 import 'package:get/get.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:isar_community/isar.dart';
 import 'package:get_thumbnail_video/video_thumbnail.dart';
 import 'package:get_thumbnail_video/index.dart';
+// Prefixed: media_kit also exports a `Media` type, which would collide with
+// Syncy's own media model below.
+import 'package:media_kit/media_kit.dart' as mk;
+import 'package:media_kit_video/media_kit_video.dart' show VideoController;
 import 'package:syncy/models/media.dart';
 import 'package:syncy/utils/files.dart';
+import 'package:syncy/utils/platform_utils.dart';
 
 enum ThumbnailRequestStatus { pending, processing, completed, failed }
 
@@ -44,6 +48,12 @@ class ThumbnailService extends GetxService {
   Timer? _processingTimer;
   late String _thumbnailsDirectory;
 
+  // Shared across every desktop thumbnail; see _generateThumbnailWithMediaKit
+  // for why a single reused output is required rather than one per video.
+  mk.Player? _thumbnailPlayer;
+  // ignore: unused_field
+  VideoController? _thumbnailController;
+
   List<ThumbnailRequest> get requestQueue => _requestQueue.toList();
   bool get isProcessing => _isProcessing.value;
   int get processedCount => _processedCount.value;
@@ -62,6 +72,9 @@ class ThumbnailService extends GetxService {
   @override
   void onClose() {
     _processingTimer?.cancel();
+    _thumbnailController = null;
+    unawaited(_thumbnailPlayer?.dispose());
+    _thumbnailPlayer = null;
     super.onClose();
   }
 
@@ -110,7 +123,9 @@ class ThumbnailService extends GetxService {
         return null;
       }
 
-      final fileName = videoPath.split('/').last;
+      // Windows paths use backslashes, so splitting on '/' alone would leave
+      // the whole path as the "file name" and produce unusable thumbnails.
+      final fileName = _fileNameOf(videoPath);
       final nameWithoutExtension = fileName.split('.').first;
       final thumbnailPath =
           '$_thumbnailsDirectory/${nameWithoutExtension}_${DateTime.now().millisecondsSinceEpoch}.jpg';
@@ -249,6 +264,13 @@ class ThumbnailService extends GetxService {
     String outputPath,
   ) async {
     try {
+      // get_thumbnail_video has no desktop implementation, so desktop grabs a
+      // frame through media_kit — the same engine that plays the file.
+      if (isDesktop) return await _generateThumbnailWithMediaKit(
+        videoPath,
+        outputPath,
+      );
+
       final result = await VideoThumbnail.thumbnailFile(
         video: videoPath,
         thumbnailPath: outputPath,
@@ -263,6 +285,71 @@ class ThumbnailService extends GetxService {
       return null;
     }
   }
+
+  /// Decodes a single frame with a shared, headless media_kit player and
+  /// writes it as a JPEG.
+  ///
+  /// The player and its video output are created once and reused for every
+  /// thumbnail. Creating and disposing a [VideoController] per video crashes
+  /// the ANGLE/Direct3D surface manager on Windows — the second texture
+  /// creation faults and takes the whole app down. Reusing one long-lived
+  /// output sidesteps that entirely. Callers must keep this serialized (the
+  /// queue's `_isProcessing` guard does) since it drives a single player.
+  Future<String?> _generateThumbnailWithMediaKit(
+    String videoPath,
+    String outputPath,
+  ) async {
+    final player = _thumbnailPlayer ??= _createThumbnailPlayer();
+    try {
+      // Arm the readiness signal before opening so the new file's first
+      // duration emission is never missed. duration fires once the file is
+      // loaded and its first frame decodable.
+      final loaded = player.stream.duration.first;
+      await player.open(mk.Media(videoPath), play: false);
+      final duration = await loaded.timeout(
+        const Duration(seconds: 20),
+        onTimeout: () => Duration.zero,
+      );
+      // Give the decoded frame a moment to present on the shared texture.
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+
+      // The opening frames of a video are very often black or a fade-in, so
+      // sample slightly into the file instead.
+      if (duration > const Duration(seconds: 4)) {
+        final target = duration * 0.1;
+        await player.seek(
+          target < const Duration(seconds: 1)
+              ? const Duration(seconds: 1)
+              : target,
+        );
+        // seek() returns before the new frame is presented; screenshotting
+        // immediately would capture the pre-seek frame.
+        await Future<void>.delayed(const Duration(milliseconds: 600));
+      }
+
+      final bytes = await player.screenshot(format: 'image/jpeg');
+      if (bytes == null || bytes.isEmpty) return null;
+
+      final file = File(outputPath);
+      await file.parent.create(recursive: true);
+      await file.writeAsBytes(bytes, flush: true);
+      return outputPath;
+    } catch (e) {
+      print('Error generating thumbnail with media_kit: $e');
+      return null;
+    }
+  }
+
+  /// Builds the shared thumbnail player. The [VideoController] must exist for
+  /// frames to be decoded into something `screenshot()` can read back.
+  mk.Player _createThumbnailPlayer() {
+    final player = mk.Player();
+    _thumbnailController = VideoController(player);
+    return player;
+  }
+
+  String _fileNameOf(String path) =>
+      path.replaceAll('\\', '/').split('/').last;
 
   Future<void> _updateMediaWithThumbnail(
     String videoPath,
@@ -281,7 +368,7 @@ class ThumbnailService extends GetxService {
         });
         print('Updated existing media with thumbnail: $videoPath');
       } else {
-        final fileName = videoPath.split('/').last;
+        final fileName = _fileNameOf(videoPath);
         final newMedia = Media()
           ..path = videoPath
           ..name = fileName

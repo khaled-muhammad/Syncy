@@ -11,9 +11,9 @@ import 'package:syncy/models/media.dart';
 import 'package:syncy/models/room.dart';
 import 'package:syncy/models/user.dart';
 import 'package:syncy/routes/app_routes.dart';
+import 'package:syncy/services/player/sync_player.dart';
 import 'package:syncy/services/reliable_websocket_service.dart';
-import 'package:video_player/video_player.dart';
-import 'package:file_picker/file_picker.dart';
+import 'package:syncy/utils/native_pickers.dart';
 
 class RoomUser {
   final String name;
@@ -68,7 +68,7 @@ class RoomController extends GetxController {
 
   ReliableWebSocketService wsService = ReliableWebSocketService();
 
-  VideoPlayerController? videoController;
+  SyncPlayer? videoController;
   int _lastPlaybackRevision = -1;
   Map<String, dynamic>? _pendingPlaybackState;
   final RxBool isMediaLoading = false.obs;
@@ -77,6 +77,10 @@ class RoomController extends GetxController {
   final RxnString mediaLoadError = RxnString();
   final RxString syncStatus = 'Connecting…'.obs;
   final RxBool requiresMediaSelection = false.obs;
+
+  /// Set when a LAN stream URL arrives from sync and the RoomScreen should
+  /// (re)open the player against it. The screen watches this and clears it.
+  final RxnString pendingStreamUrl = RxnString();
 
   String get currentUserId => _uuid;
 
@@ -228,21 +232,45 @@ class RoomController extends GetxController {
         data['current_video_title']?.toString() ??
         data['videoTitle']?.toString();
     if (title == null || title.isEmpty) return;
+
+    // A LAN-hosted room carries a playable http(s) stream URL. When present,
+    // every peer streams that URL directly — no local copy, no "pick your
+    // matching file" step. Absent, we fall back to the classic behavior where
+    // each peer supplies its own local file.
+    final url =
+        data['current_video_url']?.toString() ?? data['videoUrl']?.toString();
+    final isStream = url != null && _isNetworkUrl(url);
+
     final alreadyLoaded =
-        room.value.currentVideoTitle == title &&
+        (isStream
+            ? room.value.currentVideoUrl == url
+            : room.value.currentVideoTitle == title) &&
         (isMediaLoading.value || videoController?.value.isInitialized == true);
+
     room.value = room.value.copyWith(
       currentVideoTitle: title,
+      currentVideoUrl: isStream ? url : room.value.currentVideoUrl,
       currentPosition: Duration.zero,
       isPlaying: false,
     );
     unawaited(videoController?.pause());
+
     if (!alreadyLoaded) {
-      requiresMediaSelection.value = true;
-      mediaLoadMessage.value = '$title is ready to sync';
+      if (isStream) {
+        // Signal the RoomScreen to (re)open the stream.
+        requiresMediaSelection.value = false;
+        beginMediaLoad('Loading $title…');
+        pendingStreamUrl.value = url;
+      } else {
+        requiresMediaSelection.value = true;
+        mediaLoadMessage.value = '$title is ready to sync';
+      }
     }
     unawaited(_applyPlaybackState(data));
   }
+
+  bool _isNetworkUrl(String value) =>
+      value.startsWith('http://') || value.startsWith('https://');
 
   void _upsertChatMessage(Map<String, dynamic> value) {
     final id = value['id']?.toString() ?? '';
@@ -350,10 +378,23 @@ class RoomController extends GetxController {
     mediaLoadError.value = null;
   }
 
-  void failMediaLoad(Object error) {
+  void failMediaLoad(Object error, {String? message}) {
     isMediaLoading.value = false;
-    mediaLoadError.value = 'Could not load this media';
+    if (message != null) {
+      mediaLoadError.value = message;
+      return;
+    }
+    // A LAN stream and a local file fail for different reasons, so the message
+    // points the user at the likely cause.
+    final url = room.value.currentVideoUrl ?? '';
+    mediaLoadError.value = _isNetworkUrl(url)
+        ? "Couldn't play this stream. The PC may be offline, off this network, "
+              "or the video's format isn't supported on your phone."
+        : 'Could not load this media';
   }
+
+  /// True while the current media is a LAN stream (vs a local file).
+  bool get isStreamingMedia => _isNetworkUrl(room.value.currentVideoUrl ?? '');
 
   void setUser(Map data) {
     final index = users.indexWhere((u) => u.id == data['id']);
@@ -384,28 +425,21 @@ class RoomController extends GetxController {
   // Add method to pick subtitle file
   Future<void> selectSubtitleFile() async {
     try {
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['srt', 'vtt', 'sub', 'ass', 'ssa', 'txt'],
-        allowMultiple: false,
-      );
+      final path = await pickSubtitleFile();
 
-      if (result != null && result.files.isNotEmpty) {
-        final file = result.files.first;
-        if (file.path != null) {
-          currentSubtitlePath.value = file.path;
-          // Notify listeners that subtitle changed
-          if (onSubtitleChanged != null) {
-            onSubtitleChanged!();
-          }
-
-          Get.snackbar(
-            'Subtitle Selected',
-            'Subtitle file loaded: ${file.name}',
-            backgroundColor: Colors.green,
-            colorText: Colors.white,
-          );
+      if (path != null && path.isNotEmpty) {
+        currentSubtitlePath.value = path;
+        // Notify listeners that subtitle changed
+        if (onSubtitleChanged != null) {
+          onSubtitleChanged!();
         }
+
+        Get.snackbar(
+          'Subtitle Selected',
+          'Subtitle file loaded: ${_fileNameOf(path)}',
+          backgroundColor: Colors.green,
+          colorText: Colors.white,
+        );
       }
     } catch (e) {
       Get.snackbar(
@@ -416,6 +450,9 @@ class RoomController extends GetxController {
       );
     }
   }
+
+  String _fileNameOf(String path) =>
+      path.replaceAll('\\', '/').split('/').last;
 
   // Method to clear subtitle
   void clearSubtitle() {
@@ -454,6 +491,8 @@ class RoomController extends GetxController {
   Future createRoom(
     String roomName, {
     Media? mediaItem,
+    String? streamUrl,
+    String? streamTitle,
     RoomMode mode = RoomMode.friends,
   }) async {
     try {
@@ -468,12 +507,29 @@ class RoomController extends GetxController {
 
       if (res.data['status'] == 'success') {
         room.value = Room.fromJson(res.data['room']);
-        if (mediaItem != null) {
+        if (streamUrl != null && streamUrl.isNotEmpty) {
+          // Media hosted on a PC over the LAN: peers stream the same URL.
+          room.value.currentVideoUrl = streamUrl;
+          room.value.currentVideoTitle = streamTitle;
+        } else if (mediaItem != null) {
           room.value.currentVideoUrl = mediaItem.path;
           room.value.currentVideoTitle = mediaItem.name;
         }
         _uuid = res.data['user']['id'];
         await wsService.joinRoom(room.value.id, _uuid, user.name);
+
+        // A LAN stream must be broadcast so joiners receive the URL; a local
+        // file stays on this device and needs no broadcast at create time.
+        if (streamUrl != null && streamUrl.isNotEmpty) {
+          unawaited(
+            wsService.changeVideo(
+              room.value.id,
+              _uuid,
+              streamTitle ?? '',
+              videoUrl: streamUrl,
+            ),
+          );
+        }
 
         Get.toNamed(Routes.ROOM);
       } else {

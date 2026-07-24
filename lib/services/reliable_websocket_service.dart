@@ -301,15 +301,20 @@ class ReliableWebSocketService extends GetxService {
         coalescePlayback: true,
       );
 
-  Future<void> changeVideo(String roomId, String userId, String videoTitle) =>
-      _sendReliable(
-        Message.videoChanged(
-          roomId: roomId,
-          userId: userId,
-          videoTitle: videoTitle,
-        ),
-        coalescePlayback: true,
-      );
+  Future<void> changeVideo(
+    String roomId,
+    String userId,
+    String videoTitle, {
+    String videoUrl = '',
+  }) => _sendReliable(
+    Message.videoChanged(
+      roomId: roomId,
+      userId: userId,
+      videoTitle: videoTitle,
+      videoUrl: videoUrl,
+    ),
+    coalescePlayback: true,
+  );
 
   Future<void> sendChat(
     String roomId,
