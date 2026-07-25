@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   ArrowRight,
+  ArrowUpRight,
   Check,
   Download,
   FolderOpen,
@@ -60,56 +61,56 @@ const defaultRelease: LatestRelease = {
 const features = [
   {
     icon: Radio,
-    title: 'Playback that stays together',
-    text: 'Play, pause, and seek are revisioned through one authoritative room state, with reconnect recovery and Android lifecycle protection.',
+    title: 'Authoritative playback',
+    text: 'Revisioned play, pause, and seek commands keep every participant on the newest room state.',
     accent: 'violet',
   },
   {
     icon: Wifi,
-    title: 'Stream from your PC',
-    text: 'Pair Android with a Windows PC on your local network, browse its library, and stream the original file with range seeking.',
+    title: 'Direct PC streaming',
+    text: 'Pair Android with Windows over your LAN and stream the original file with responsive seeking.',
     accent: 'blue',
   },
   {
     icon: FolderOpen,
-    title: 'A real desktop library',
-    text: 'Choose folders on Windows, index nested libraries, generate thumbnails, and play formats through the desktop media engine.',
+    title: 'Desktop media library',
+    text: 'Index nested folders, generate thumbnails, search, and play broad desktop formats.',
     accent: 'magenta',
   },
   {
     icon: MessageCircle,
-    title: 'Conversation in the room',
-    text: 'Live chat, typing presence, participant status, and reconnect-safe message history stay beside the video.',
+    title: 'Room conversation',
+    text: 'Chat history, typing presence, and participant status stay beside the movie.',
     accent: 'blue',
   },
   {
     icon: Heart,
-    title: 'Reactions on the moment',
-    text: 'Send lightweight reactions that appear over the player without interrupting playback or taking over the screen.',
+    title: 'In-player reactions',
+    text: 'Send lightweight reactions that land over the moment without interrupting playback.',
     accent: 'magenta',
   },
   {
     icon: Subtitles,
-    title: 'Your subtitles, your timing',
-    text: 'Load SRT or VTT files, clear them instantly, and adjust subtitle delay when a source track needs correction.',
+    title: 'Subtitle timing',
+    text: 'Load SRT or VTT files and correct track timing with an adjustable subtitle delay.',
     accent: 'violet',
   },
   {
     icon: Search,
-    title: 'Find the file quickly',
-    text: 'Android media discovery, thumbnails, folder browsing, and search make large local collections manageable.',
+    title: 'Fast media discovery',
+    text: 'Thumbnails, folders, and search keep large local collections easy to navigate.',
     accent: 'magenta',
   },
   {
     icon: Gauge,
-    title: 'Controls for how you watch',
-    text: 'Fullscreen playback, double-tap seeking, desktop keyboard controls, and playback speed from 0.25x to 10x.',
+    title: 'Serious player controls',
+    text: 'Fullscreen, double-tap seeking, keyboard control, and speeds from 0.25x to 10x.',
     accent: 'blue',
   },
   {
     icon: ShieldCheck,
-    title: 'Guest-first by design',
-    text: 'Create or join a room with a display name. Your media remains on your devices or your private local network.',
+    title: 'Guest-first rooms',
+    text: 'Create or join with a display name. Media stays on your devices or private network.',
     accent: 'violet',
   },
 ];
@@ -137,6 +138,7 @@ function formatDate(value?: string) {
 function App() {
   const [release, setRelease] = useState(defaultRelease);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [headerCompact, setHeaderCompact] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -171,45 +173,89 @@ function App() {
     return () => controller.abort();
   }, []);
 
+  useEffect(() => {
+    const handleScroll = () => setHeaderCompact(window.scrollY > 24);
+    handleScroll();
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  useEffect(() => {
+    document.body.style.overflow = menuOpen ? 'hidden' : '';
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [menuOpen]);
+
   const closeMenu = () => setMenuOpen(false);
 
   return (
     <div className="site-shell">
-      <header className="site-header">
-        <a className="brand" href="#top" aria-label="Syncy home">
-          <img src="/logo.png" alt="" />
-          <span>Syncy</span>
-        </a>
+      <header className={`site-header${headerCompact ? ' is-compact' : ''}`}>
+        <div className="header-inner">
+          <a className="brand" href="#top" aria-label="Syncy home">
+            <img src="/logo.png" alt="" />
+            <span>Syncy</span>
+          </a>
 
-        <nav className={menuOpen ? 'nav-links is-open' : 'nav-links'}>
+          <nav className="desktop-nav" aria-label="Primary navigation">
+            <a href="#overview">Overview</a>
+            <a href="#features">Features</a>
+            <a href="#lan">PC streaming</a>
+            <a href="#downloads">Downloads</a>
+          </nav>
+
+          <div className="header-actions">
+            <a
+              className="icon-button"
+              href={repoUrl}
+              target="_blank"
+              rel="noreferrer"
+              aria-label="View Syncy on GitHub"
+              title="View Syncy on GitHub"
+            >
+              <Github size={19} />
+            </a>
+            <a className="header-download" href="#downloads">
+              <Download size={17} />
+              Get Syncy
+            </a>
+            <button
+              className="menu-button"
+              type="button"
+              aria-label={menuOpen ? 'Close navigation' : 'Open navigation'}
+              aria-expanded={menuOpen}
+              onClick={() => setMenuOpen((open) => !open)}
+            >
+              {menuOpen ? <X size={21} /> : <Menu size={21} />}
+            </button>
+          </div>
+        </div>
+
+        <nav
+          className={`mobile-nav${menuOpen ? ' is-open' : ''}`}
+          aria-label="Mobile navigation"
+        >
+          <div className="mobile-nav-status">
+            <span className="live-dot" />
+            {release.version} available
+          </div>
+          <a href="#overview" onClick={closeMenu}>
+            Overview <ArrowRight size={18} />
+          </a>
           <a href="#features" onClick={closeMenu}>
-            Features
+            Features <ArrowRight size={18} />
           </a>
           <a href="#lan" onClick={closeMenu}>
-            PC streaming
+            PC streaming <ArrowRight size={18} />
           </a>
           <a href="#downloads" onClick={closeMenu}>
-            Downloads
+            Downloads <ArrowRight size={18} />
           </a>
           <a href={repoUrl} target="_blank" rel="noreferrer">
-            GitHub
+            GitHub <ArrowUpRight size={18} />
           </a>
         </nav>
-
-        <a className="header-download" href="#downloads">
-          <Download size={17} />
-          Download
-        </a>
-
-        <button
-          className="menu-button"
-          type="button"
-          aria-label={menuOpen ? 'Close navigation' : 'Open navigation'}
-          aria-expanded={menuOpen}
-          onClick={() => setMenuOpen((open) => !open)}
-        >
-          {menuOpen ? <X /> : <Menu />}
-        </button>
       </header>
 
       <main>
@@ -225,20 +271,27 @@ function App() {
             preload="metadata"
           />
           <div className="hero-shade" />
-          <div className="hero-content">
+          <div className="hero-grid" aria-hidden="true" />
+
+          <div className="hero-content page-width">
             <div className="release-kicker">
               <span className="live-dot" />
-              {release.version} available now
+              {release.version} / Android and Windows
             </div>
             <h1>Syncy</h1>
             <p className="hero-lead">
-              Watch your own videos together. Precise room playback, live chat,
-              reactions, subtitles, and direct PC-to-phone streaming.
+              Your videos. Your people.
+              <br />
+              One shared timeline.
+            </p>
+            <p className="hero-detail">
+              Precise room playback, conversation, subtitles, reactions, and
+              direct PC-to-phone streaming for the media you already own.
             </p>
             <div className="hero-actions">
               <a className="button primary" href="#downloads">
-                Get the latest build
-                <ArrowRight size={19} />
+                Download Syncy
+                <Download size={18} />
               </a>
               <a
                 className="button secondary"
@@ -246,229 +299,344 @@ function App() {
                 target="_blank"
                 rel="noreferrer"
               >
-                <Github size={19} />
+                <Github size={18} />
                 View source
               </a>
             </div>
           </div>
-          <a className="hero-next" href="#downloads" aria-label="View downloads">
-            Android + Windows
-            <Download size={16} />
-          </a>
+
+          <div className="hero-rail">
+            <div className="page-width hero-rail-inner">
+              <span>
+                <strong>01</strong>
+                Room playback
+              </span>
+              <span>
+                <strong>02</strong>
+                Local-first media
+              </span>
+              <span>
+                <strong>03</strong>
+                Private LAN streaming
+              </span>
+            </div>
+          </div>
         </section>
 
-        <section className="download-band" id="downloads">
-          <div className="band-intro">
-            <span className="section-index">01 / DOWNLOAD</span>
-            <h2>Latest release, direct from GitHub.</h2>
-            <p>
-              {release.version} · {formatDate(release.publishedAt)}
-            </p>
-          </div>
+        <section className="release-section" id="downloads">
+          <div className="page-width release-layout">
+            <div className="release-copy">
+              <span className="section-label">Latest release</span>
+              <h2>Ready for both screens.</h2>
+              <p>
+                {release.version} / {formatDate(release.publishedAt)}
+              </p>
+            </div>
 
-          <div className="download-options">
-            <a
-              className="download-row"
-              href={release.androidUrl}
-              target="_blank"
-              rel="noreferrer"
-            >
-              <span className="platform-icon android">
-                <Smartphone />
-              </span>
-              <span>
-                <strong>Android</strong>
-                <small>Universal APK · Android 5.0+</small>
-              </span>
-              <Download size={21} />
-            </a>
-            <a
-              className="download-row"
-              href={release.windowsUrl}
-              target="_blank"
-              rel="noreferrer"
-            >
-              <span className="platform-icon windows">
-                <Monitor />
-              </span>
-              <span>
-                <strong>Windows</strong>
-                <small>64-bit portable ZIP</small>
-              </span>
-              <Download size={21} />
-            </a>
+            <div className="release-options">
+              <a
+                className="release-option"
+                href={release.androidUrl}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <span className="platform-icon android">
+                  <Smartphone size={22} />
+                </span>
+                <span className="release-option-copy">
+                  <small>Mobile</small>
+                  <strong>Android</strong>
+                  <span>Universal APK / Android 5.0+</span>
+                </span>
+                <Download size={20} />
+              </a>
+              <a
+                className="release-option"
+                href={release.windowsUrl}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <span className="platform-icon windows">
+                  <Monitor size={22} />
+                </span>
+                <span className="release-option-copy">
+                  <small>Desktop</small>
+                  <strong>Windows</strong>
+                  <span>64-bit portable ZIP</span>
+                </span>
+                <Download size={20} />
+              </a>
+            </div>
+          </div>
+        </section>
+
+        <section className="overview-section" id="overview">
+          <div className="page-width">
+            <div className="section-heading">
+              <div>
+                <span className="section-label">The shared room</span>
+                <h2>Same movie. Same moment. Every screen.</h2>
+              </div>
+              <p>
+                Syncy treats playback as shared state, not a collection of
+                loosely connected buttons. Everyone sees the latest room
+                command, whether they stayed in the app or just returned.
+              </p>
+            </div>
+
+            <div className="product-stage">
+              <div className="product-screen">
+                <img src="/hero_ui.jpg" alt="Syncy Android media library" />
+                <div className="screen-caption">
+                  <span>Android library</span>
+                  <strong>Media stays local</strong>
+                </div>
+              </div>
+
+              <div className="room-state">
+                <div className="room-state-topline">
+                  <span>ROOM / J7MK2Q</span>
+                  <span className="state-live">
+                    <span className="live-dot" /> LIVE
+                  </span>
+                </div>
+                <div className="now-playing">
+                  <span>NOW PLAYING</span>
+                  <strong>Shared timeline</strong>
+                  <p>01:22:16 / 02:04:38</p>
+                </div>
+                <div className="timeline">
+                  <span />
+                  <i />
+                </div>
+                <div className="state-members">
+                  <span>
+                    <Monitor size={19} />
+                    Host
+                    <strong>Synced</strong>
+                  </span>
+                  <span>
+                    <Smartphone size={19} />
+                    Android
+                    <strong>Synced</strong>
+                  </span>
+                </div>
+                <div className="state-note">
+                  <RefreshCw size={19} />
+                  <span>
+                    <strong>Lifecycle recovery</strong>
+                    Reconciles after split screen and system UI transitions.
+                  </span>
+                </div>
+              </div>
+            </div>
           </div>
         </section>
 
         <section className="feature-section" id="features">
-          <div className="section-heading">
-            <span className="section-index">02 / WHAT SHIPS</span>
-            <h2>More than synchronized play buttons.</h2>
-            <p>
-              Syncy is a complete watch room for local files, built for phones
-              and desktops that need to stay in the same moment.
-            </p>
-          </div>
+          <div className="page-width">
+            <div className="section-heading feature-heading">
+              <div>
+                <span className="section-label">Everything in the room</span>
+                <h2>A complete local watch experience.</h2>
+              </div>
+              <p>
+                Built around the details that make long sessions feel
+                dependable on both desktop and mobile.
+              </p>
+            </div>
 
-          <div className="feature-grid">
-            {features.map(({ icon: Icon, title, text, accent }, index) => (
-              <article className={`feature-item accent-${accent}`} key={title}>
-                <div className="feature-number">
-                  {String(index + 1).padStart(2, '0')}
-                </div>
-                <Icon size={25} strokeWidth={1.8} />
-                <h3>{title}</h3>
-                <p>{text}</p>
-              </article>
-            ))}
+            <div className="feature-grid">
+              {features.map(({ icon: Icon, title, text, accent }, index) => (
+                <article className={`feature-item accent-${accent}`} key={title}>
+                  <div className="feature-topline">
+                    <Icon size={24} strokeWidth={1.8} />
+                    <span>{String(index + 1).padStart(2, '0')}</span>
+                  </div>
+                  <h3>{title}</h3>
+                  <p>{text}</p>
+                </article>
+              ))}
+            </div>
           </div>
         </section>
 
         <section className="lan-section" id="lan">
-          <div className="lan-copy">
-            <span className="section-index">03 / PC TO PHONE</span>
-            <h2>Your Windows library, available on the couch.</h2>
-            <p>
-              Pair once over your private LAN. Syncy discovers the PC, opens its
-              indexed folders on Android, and streams the selected source file
-              without uploading it to a cloud library.
-            </p>
-            <ul>
-              <li>
-                <Check size={18} /> Six-digit pairing and saved trusted devices
-              </li>
-              <li>
-                <Check size={18} /> Nested folder browsing and video thumbnails
-              </li>
-              <li>
-                <Check size={18} /> HTTP range support for responsive seeking
-              </li>
-            </ul>
-          </div>
+          <div className="page-width lan-layout">
+            <div className="lan-copy">
+              <span className="section-label">Windows to Android</span>
+              <h2>Your desktop library, available on the couch.</h2>
+              <p>
+                Pair once over your private network. Browse indexed folders on
+                Android and stream the original source without uploading a
+                cloud copy.
+              </p>
+              <ul>
+                <li>
+                  <Check size={18} /> Six-digit pairing and trusted devices
+                </li>
+                <li>
+                  <Check size={18} /> Nested folders and video thumbnails
+                </li>
+                <li>
+                  <Check size={18} /> HTTP range support for precise seeking
+                </li>
+              </ul>
+            </div>
 
-          <div className="connection-map" aria-label="Windows to Android flow">
-            <div className="device-node">
-              <Monitor />
-              <strong>Windows PC</strong>
-              <span>Indexes and serves</span>
-            </div>
-            <div className="connection-line">
-              <span />
-              <div>
-                <Wifi size={20} />
-                PRIVATE LAN
+            <div className="connection-map" aria-label="Windows to Android flow">
+              <div className="device-node">
+                <span className="device-icon">
+                  <Monitor />
+                </span>
+                <span>
+                  <small>SOURCE</small>
+                  <strong>Windows PC</strong>
+                </span>
               </div>
-            </div>
-            <div className="device-node">
-              <Smartphone />
-              <strong>Android</strong>
-              <span>Browses and plays</span>
+              <div className="connection-flow">
+                <span />
+                <div>
+                  <Wifi size={18} />
+                  PRIVATE LAN
+                </div>
+              </div>
+              <div className="device-node">
+                <span className="device-icon">
+                  <Smartphone />
+                </span>
+                <span>
+                  <small>PLAYER</small>
+                  <strong>Android</strong>
+                </span>
+              </div>
             </div>
           </div>
         </section>
 
         <section className="reliability-section">
-          <div className="reliability-visual">
-            <div className="state-line">
-              <span>ROOM REVISION 184</span>
-              <strong>PAUSED · 01:22:16</strong>
+          <div className="page-width reliability-layout">
+            <div className="reliability-copy">
+              <span className="section-label">Reliable by design</span>
+              <h2>The newest command wins. Every time.</h2>
+              <p>
+                Playback is revisioned on the backend and applied in order on
+                every client. Reconnects and Android lifecycle transitions
+                recover against the room instead of guessing.
+              </p>
+              <div className="reliability-points">
+                <span>
+                  <Zap size={18} /> Millisecond positions
+                </span>
+                <span>
+                  <RefreshCw size={18} /> Resume reconciliation
+                </span>
+                <span>
+                  <ShieldCheck size={18} /> Stale command rejection
+                </span>
+              </div>
             </div>
-            <div className="sync-track">
-              <span className="track-fill" />
-              <span className="track-marker marker-one" />
-              <span className="track-marker marker-two" />
-              <span className="track-marker marker-three" />
-            </div>
-            <div className="peer-grid">
-              <span><Monitor size={18} /> HOST · SYNCED</span>
-              <span><Smartphone size={18} /> ANDROID · SYNCED</span>
-              <span><RefreshCw size={18} /> RECONNECT · RESTORED</span>
-            </div>
-          </div>
-          <div className="reliability-copy">
-            <span className="section-index">04 / RELIABLE STATE</span>
-            <h2>The newest command wins. Every time.</h2>
-            <p>
-              Playback state is revisioned on the backend and applied in order
-              on every client. Reconnects, split screen, and Android system UI
-              transitions reconcile against the room instead of guessing.
-            </p>
-            <div className="reliability-points">
-              <span><Zap size={18} /> Millisecond positions</span>
-              <span><RefreshCw size={18} /> Resume refresh</span>
-              <span><ShieldCheck size={18} /> Stale command rejection</span>
+
+            <div className="revision-panel">
+              <div className="revision-header">
+                <span>ROOM STATE</span>
+                <strong>REV 184</strong>
+              </div>
+              <div className="revision-event">
+                <span>184</span>
+                <div>
+                  <strong>Pause / 01:22:16.408</strong>
+                  <small>Applied to 2 participants</small>
+                </div>
+                <Check size={18} />
+              </div>
+              <div className="revision-event muted-event">
+                <span>183</span>
+                <div>
+                  <strong>Seek / 01:22:14.902</strong>
+                  <small>Superseded by revision 184</small>
+                </div>
+                <RefreshCw size={18} />
+              </div>
+              <div className="revision-footer">
+                <span className="live-dot" />
+                All participants synchronized
+              </div>
             </div>
           </div>
         </section>
 
         <section className="room-section">
-          <div className="section-heading compact">
-            <span className="section-index">05 / IN THE ROOM</span>
-            <h2>Keep the movie central. Keep everyone present.</h2>
-          </div>
-          <div className="room-layout">
-            <div className="room-player">
-              <img src="/hero_ui.jpg" alt="Syncy media library on Android" />
-              <div className="play-control"><Play fill="currentColor" /></div>
-            </div>
-            <div className="room-notes">
-              <div>
-                <MessageCircle />
-                <h3>Live chat</h3>
-                <p>History, typing indicators, and online presence.</p>
-              </div>
-              <div>
-                <Heart />
-                <h3>Floating reactions</h3>
-                <p>Quick reactions land over the moment and clear naturally.</p>
-              </div>
-              <div>
-                <Subtitles />
-                <h3>Subtitle control</h3>
-                <p>SRT, VTT, and timing offsets without changing the source.</p>
+          <div className="room-media">
+            <img src="/hero_ui.jpg" alt="Syncy local media library" />
+            <div className="room-media-shade" />
+            <div className="room-media-copy page-width">
+              <span className="section-label">Inside the room</span>
+              <h2>Keep the movie central. Keep everyone present.</h2>
+              <div className="room-capabilities">
+                <span>
+                  <MessageCircle size={20} />
+                  Live chat
+                </span>
+                <span>
+                  <Heart size={20} />
+                  Reactions
+                </span>
+                <span>
+                  <Subtitles size={20} />
+                  Subtitle timing
+                </span>
+                <span>
+                  <Play size={20} />
+                  Fullscreen control
+                </span>
               </div>
             </div>
           </div>
         </section>
 
         <section className="final-download">
-          <div>
-            <span className="section-index">READY WHEN YOU ARE</span>
-            <h2>Start the room. Bring your own movie.</h2>
-          </div>
-          <div className="final-actions">
-            <a className="button primary" href={release.androidUrl}>
-              <Smartphone size={19} />
-              Android
-            </a>
-            <a className="button light" href={release.windowsUrl}>
-              <Monitor size={19} />
-              Windows
-            </a>
+          <div className="page-width final-layout">
+            <div>
+              <span className="section-label">Start watching</span>
+              <h2>Bring the movie. Syncy handles the room.</h2>
+            </div>
+            <div className="final-actions">
+              <a className="button dark" href={release.androidUrl}>
+                <Smartphone size={18} />
+                Android
+              </a>
+              <a className="button light" href={release.windowsUrl}>
+                <Monitor size={18} />
+                Windows
+              </a>
+            </div>
           </div>
         </section>
       </main>
 
       <footer>
-        <div className="footer-brand">
-          <img src="/logo.png" alt="" />
-          <div>
-            <strong>Syncy</strong>
-            <span>Local media. Shared time.</span>
+        <div className="page-width footer-inner">
+          <div className="footer-brand">
+            <img src="/logo.png" alt="" />
+            <div>
+              <strong>Syncy</strong>
+              <span>Local media. Shared time.</span>
+            </div>
           </div>
+          <div className="footer-links">
+            <a href={release.releaseUrl} target="_blank" rel="noreferrer">
+              {release.version}
+            </a>
+            <a href={repoUrl} target="_blank" rel="noreferrer">
+              Source
+            </a>
+            <a href={`${repoUrl}/issues`} target="_blank" rel="noreferrer">
+              Issues
+            </a>
+          </div>
+          <p>Built by Khaled Muhammad / 2026</p>
         </div>
-        <div className="footer-links">
-          <a href={release.releaseUrl} target="_blank" rel="noreferrer">
-            {release.version}
-          </a>
-          <a href={repoUrl} target="_blank" rel="noreferrer">
-            Source
-          </a>
-          <a href={`${repoUrl}/issues`} target="_blank" rel="noreferrer">
-            Issues
-          </a>
-        </div>
-        <p>Built by Khaled Muhammad · 2026</p>
       </footer>
     </div>
   );

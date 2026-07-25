@@ -18,7 +18,7 @@ body {
   min-height: 100vh;
   margin: 0;
   overflow-x: hidden;
-  background: #10110f;
+  background: #090512;
   font-family: 'Inter', sans-serif;
   letter-spacing: 0;
   text-rendering: optimizeLegibility;
@@ -44,8 +44,8 @@ video {
 }
 
 ::selection {
-  background: #dfff47;
-  color: #10110f;
+  background: #55d6a7;
+  color: #090512;
 }
 
 @media (prefers-reduced-motion: reduce) {
