@@ -1,91 +1,153 @@
-# 🎬 Syncy
+# Syncy
 
-### *Real-Time Cross-Platform Media Sync & Watch Party App*
+Real-time watch rooms for local video files, available on Android and Windows.
 
-<div align="center">
-  <img src="landing_website/public/logo.png" alt="Syncy Logo" width="120"/>
-  
-  [![Website](https://img.shields.io/badge/website-synncy.netlify.app-blue?style=flat-square)](https://synncy.netlify.app/)
-  ![Flutter](https://img.shields.io/badge/Flutter-02569B?style=flat-square&logo=flutter&logoColor=white)
-  ![Platform](https://img.shields.io/badge/Android%20%7C%20iOS-34A853?style=flat-square)
-</div>
+<p align="center">
+  <img src="landing_website/public/logo.png" alt="Syncy logo" width="112">
+</p>
 
-**Watch videos with friends in real-time using any video file on your device.**
+<p align="center">
+  <a href="https://syncy.kcraft.dev"><img alt="Website" src="https://img.shields.io/badge/website-syncy.kcraft.dev-DFFF47?style=flat-square"></a>
+  <a href="https://github.com/khaled-muhammad/Syncy/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/khaled-muhammad/Syncy?style=flat-square"></a>
+  <img alt="Flutter" src="https://img.shields.io/badge/Flutter-3.41.9-54C5F8?style=flat-square&logo=flutter&logoColor=white">
+  <img alt="Platforms" src="https://img.shields.io/badge/platforms-Android%20%7C%20Windows-FF715F?style=flat-square">
+</p>
 
----
+<p align="center">
+  <a href="https://github.com/khaled-muhammad/Syncy/releases/latest/download/app-universal.apk"><strong>Download Android</strong></a>
+  &nbsp;&middot;&nbsp;
+  <a href="https://github.com/khaled-muhammad/Syncy/releases/latest/download/syncy-windows-release.zip"><strong>Download Windows</strong></a>
+  &nbsp;&middot;&nbsp;
+  <a href="https://github.com/khaled-muhammad/Syncy/releases/latest">Release notes</a>
+</p>
 
-<div align="center">
-  <img src="landing_website/public/hero_ui.jpg" alt="Syncy UI" width="600"/>
-</div>
+![Syncy Android media library](landing_website/public/hero_ui.jpg)
 
----
+## What Syncy does
 
-## ✨ Features
+Syncy keeps video playback aligned for everyone in a room while each device
+plays the source locally or streams it from a paired PC. The backend owns a
+revisioned playback state, so reconnects and late messages converge on the
+newest play, pause, or seek command.
 
-| | |
-|-|-|
-| **📱 Media Discovery** | Automatic device scanning, thumbnail generation, smart search |
-| **⚡ Real-time Sync** | WebSocket-powered playback with sub-second latency |
-| **🎨 Modern UI** | Glassmorphic design, dark theme, gesture navigation |
-| **🔍 Smart Search** | Fuzzy matching handles typos, relevance scoring |
-| **Chatting** | Allow live chatting in rooms. |
-| **Reacting** | Allow live reacting while watching. |
+### Playback and rooms
 
----
+- Millisecond-precise play, pause, and seek synchronization
+- Revision-aware conflict handling and automatic reconnect recovery
+- Android lifecycle reconciliation for status shade, app switching, and split screen
+- Friends and Couple room modes
+- Participant presence and durable room membership
+- Fullscreen playback, desktop keyboard controls, and double-tap seeking
+- Playback rates from 0.25x to 10x
 
+### Media and devices
 
-## 🛠️ Quick Start
+- Automatic Android media discovery with thumbnails and search
+- User-selected Windows library folders with nested folder browsing
+- Desktop playback through `media_kit` for broad container and codec support
+- Secure six-digit PC pairing over the local network
+- Browse a paired Windows library from Android
+- Direct LAN streaming with HTTP byte ranges for seeking
+- SRT and VTT subtitles with adjustable timing offset
+
+### Social
+
+- Live room chat with reconnect-safe recent history
+- Typing indicators and online presence
+- Floating reactions over the player
+
+## Architecture
+
+```text
+Android / Windows Flutter app
+        |
+        | HTTPS + WebSocket
+        v
+Django + Channels + Daphne
+        |
+        +-- PostgreSQL: rooms, users, playback revisions, chat
+        +-- Redis: realtime channel layer
+
+Windows LAN host
+        |
+        +-- discovery + pairing + HTTP range streaming
+        |
+        v
+Android LAN client
+```
+
+The Flutter player is abstracted behind `SyncPlayer`: Android uses
+`video_player`, while Windows uses `media_kit`. `RoomController` routes local
+and remote actions through an ordered playback synchronizer.
+
+## Run locally
+
+Requirements:
+
+- Flutter `3.41.9`
+- Dart `3.8+`
+- Android SDK 21+ for Android builds
+- Visual Studio with Desktop development with C++ for Windows builds
+- Python 3.10+, PostgreSQL, and Redis for the backend
 
 ```bash
 git clone https://github.com/khaled-muhammad/Syncy.git
 cd Syncy
 flutter pub get
-dart run realm generate
+flutter test
 flutter run
 ```
 
-**Requirements:** Flutter 3.8+ | Android SDK 21+ | iOS 12+
-
----
-
-## 📁 Structure
-
-```
-lib/
-├── controllers/    # GetX state
-├── screens/        # UI
-├── widgets/        # Components
-├── models/         # Realm DB
-├── services/       # WebSocket, thumbnails
-└── utils/          # Search, helpers
-```
-
----
-
-## 📊 Status
-
-✅ Media scanning • Thumbnails • Smart search • WebSocket sync  
-⚠️ iOS permissions • Large file optimization
-
----
-
-## 🤝 Contribute
+Run the backend:
 
 ```bash
-git checkout -b feature/name
-git commit -m 'Add feature'
-git push origin feature/name
-# Open PR
+cd syncplay_backend
+python -m venv venv
+# Windows: venv\Scripts\activate
+# Linux/macOS: source venv/bin/activate
+pip install -r requirements.txt
+python manage.py migrate
+python manage.py runserver
 ```
 
----
+Set `USE_SQLITE=true` for a lightweight local database. Production settings
+are documented in [`syncplay_backend/DEPLOYMENT.md`](syncplay_backend/DEPLOYMENT.md).
 
-<div align="center">
-  <sub>
-    <a href="https://synncy.netlify.app/">Website</a> • 
-    <a href="https://github.com/khaled-muhammad/Syncy/issues">Issues</a> • 
-    <a href="https://github.com/khaled-muhammad/Syncy/discussions">Discussions</a>
-  </sub>
-  <br/>
-  <sub>Built by a 17-year-old dev · MIT © Khaled Muhammad</sub>
-</div>
+## Build
+
+```bash
+flutter build apk --release
+flutter build windows --release
+```
+
+GitHub Actions builds Android and Windows on every push to `main`. Tags matching
+`v*` publish a GitHub release with a universal APK, ABI-specific APKs, and a
+portable Windows ZIP. The website and README download URLs always resolve
+through GitHub's latest release.
+
+## Project layout
+
+```text
+lib/
+  controllers/          Room, library, profile, and LAN state
+  services/player/      Shared player API and synchronization coordinator
+  services/lan/         Discovery, pairing, library API, and range streaming
+  screens/              Android and desktop interfaces
+  widgets/              Player controls, chat, and reactions
+syncplay_backend/       Django REST and Channels backend
+landing_website/        React/Vite product site
+```
+
+## Contributing
+
+```bash
+git checkout -b feature/short-name
+git commit -m "Describe the change"
+git push origin feature/short-name
+```
+
+Open an issue for bugs or a pull request for focused improvements:
+[issues](https://github.com/khaled-muhammad/Syncy/issues) ·
+[discussions](https://github.com/khaled-muhammad/Syncy/discussions).
+
+Built by Khaled Muhammad.
