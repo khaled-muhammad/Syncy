@@ -11,5 +11,8 @@ import 'package:flutter/foundation.dart';
 bool get isDesktop =>
     !kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS);
 
+/// Whether the app is running on Windows.
+bool get isWindows => !kIsWeb && Platform.isWindows;
+
 /// Whether the app is running on a touch-first mobile operating system.
 bool get isMobile => !kIsWeb && (Platform.isAndroid || Platform.isIOS);

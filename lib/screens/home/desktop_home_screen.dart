@@ -10,6 +10,7 @@ import 'package:syncy/models/media.dart';
 import 'package:syncy/routes/app_routes.dart';
 import 'package:syncy/screens/lan/pc_pairing_screen.dart';
 import 'package:syncy/screens/search/seach_screen.dart';
+import 'package:syncy/utils/platform_utils.dart';
 import 'package:syncy/widgets/adaptive_sheet.dart';
 import 'package:syncy/widgets/media_card.dart';
 import 'package:syncy/widgets/native_purple_mesh_background.dart';
@@ -98,11 +99,12 @@ class _LibrarySidebar extends StatelessWidget {
                 label: 'Pair a phone',
                 onPressed: () => Get.to(() => const PcPairingScreen()),
               ),
-              _SidebarAction(
-                icon: Icons.settings_rounded,
-                label: 'Settings',
-                onPressed: () => Get.toNamed(Routes.SETTINGS),
-              ),
+              if (!isWindows)
+                _SidebarAction(
+                  icon: Icons.settings_rounded,
+                  label: 'Settings',
+                  onPressed: () => Get.toNamed(Routes.SETTINGS),
+                ),
               const SizedBox(height: 8),
             ],
           ),
@@ -184,9 +186,7 @@ class _RootFolderTile extends StatelessWidget {
         children: [
           _FolderRow(
             label: folder.name,
-            icon: isSelected
-                ? Icons.folder_open_rounded
-                : Icons.folder_rounded,
+            icon: isSelected ? Icons.folder_open_rounded : Icons.folder_rounded,
             depth: 0,
             isActive: isSelected && controller.selectedSubPath.value == null,
             onTap: () => controller.selectRoot(folder),
@@ -523,7 +523,8 @@ class _MediaGrid extends StatelessWidget {
         return MediaCard(
           mediaElement: item,
           isAudio: false,
-          onPressed: () => showAdaptiveSheet(CreateRoomBottomSheet(media: item)),
+          onPressed: () =>
+              showAdaptiveSheet(CreateRoomBottomSheet(media: item)),
         );
       },
     );
