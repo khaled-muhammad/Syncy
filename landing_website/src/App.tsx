@@ -62,7 +62,7 @@ const features = [
     icon: Radio,
     title: 'Playback that stays together',
     text: 'Play, pause, and seek are revisioned through one authoritative room state, with reconnect recovery and Android lifecycle protection.',
-    accent: 'lime',
+    accent: 'violet',
   },
   {
     icon: Wifi,
@@ -74,7 +74,7 @@ const features = [
     icon: FolderOpen,
     title: 'A real desktop library',
     text: 'Choose folders on Windows, index nested libraries, generate thumbnails, and play formats through the desktop media engine.',
-    accent: 'coral',
+    accent: 'magenta',
   },
   {
     icon: MessageCircle,
@@ -86,19 +86,19 @@ const features = [
     icon: Heart,
     title: 'Reactions on the moment',
     text: 'Send lightweight reactions that appear over the player without interrupting playback or taking over the screen.',
-    accent: 'coral',
+    accent: 'magenta',
   },
   {
     icon: Subtitles,
     title: 'Your subtitles, your timing',
     text: 'Load SRT or VTT files, clear them instantly, and adjust subtitle delay when a source track needs correction.',
-    accent: 'lime',
+    accent: 'violet',
   },
   {
     icon: Search,
     title: 'Find the file quickly',
     text: 'Android media discovery, thumbnails, folder browsing, and search make large local collections manageable.',
-    accent: 'coral',
+    accent: 'magenta',
   },
   {
     icon: Gauge,
@@ -110,7 +110,7 @@ const features = [
     icon: ShieldCheck,
     title: 'Guest-first by design',
     text: 'Create or join a room with a display name. Your media remains on your devices or your private local network.',
-    accent: 'lime',
+    accent: 'violet',
   },
 ];
 
