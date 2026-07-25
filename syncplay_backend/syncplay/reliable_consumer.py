@@ -44,7 +44,7 @@ class ReliableSyncPlayConsumer(AsyncWebsocketConsumer):
                 await self.handle_join(data)
                 return
             if kind == 'heartbeat':
-                await self.handle_heartbeat()
+                await self.handle_heartbeat(data)
                 return
             if not await self.require_joined():
                 return
@@ -194,9 +194,11 @@ class ReliableSyncPlayConsumer(AsyncWebsocketConsumer):
         )
         await self.send_ack(data)
 
-    async def handle_heartbeat(self):
+    async def handle_heartbeat(self, data):
         if self.user_id:
             await self.update_session_activity()
+            if (data.get('data') or {}).get('requestState') is True:
+                await self.send_room_state()
         await self.send_json(
             {'type': 'heartbeat', 'data': {'serverTime': timezone.now().isoformat()}}
         )

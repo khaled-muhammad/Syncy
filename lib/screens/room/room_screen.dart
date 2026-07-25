@@ -82,7 +82,10 @@ class _RoomScreenState extends State<RoomScreen> {
     final player = isNetwork
         ? createSyncPlayerFromUrl(path)
         : createSyncPlayer(File(path));
-    controller.videoController = player;
+    if (previous != null) {
+      controller.detachVideoController(previous);
+    }
+    controller.attachVideoController(player);
     if (mounted) setState(() {});
     previous?.dispose();
 
@@ -133,8 +136,9 @@ class _RoomScreenState extends State<RoomScreen> {
     WakelockPlus.disable();
 
     _streamWorker?.dispose();
-    controller.videoController?.dispose();
-    controller.videoController = null;
+    final player = controller.videoController;
+    controller.detachVideoController(player);
+    player?.dispose();
     unawaited(controller.leaveRoom());
     super.dispose();
   }

@@ -42,6 +42,41 @@ class ReliableWebSocketTests(TransactionTestCase):
         self.assertEqual(round(self.room.current_position.total_seconds() * 1000), 1234)
         self.assertFalse(User.objects.get(id=self.user_id).is_online)
 
+    def test_heartbeat_can_refresh_authoritative_playback_state(self):
+        async_to_sync(self._heartbeat_refresh_scenario)()
+
+    async def _heartbeat_refresh_scenario(self):
+        socket = WebsocketCommunicator(
+            application, f'/ws/room/{self.room.id}/'
+        )
+        await socket.connect()
+        await socket.send_json_to(self.join_envelope())
+        await self.receive_types(socket, {'user_joined', 'room_update', 'ack'})
+
+        await socket.send_json_to(
+            {
+                'type': 'pause',
+                'userId': str(self.user_id),
+                'eventId': str(uuid.uuid4()),
+                'data': {'positionMs': 4321},
+            }
+        )
+        await self.receive_types(socket, {'pause', 'ack'})
+
+        await socket.send_json_to(
+            {
+                'type': 'heartbeat',
+                'userId': str(self.user_id),
+                'data': {'requestState': True},
+            }
+        )
+        events = await self.receive_types(socket, {'room_update', 'heartbeat'})
+        state = events['room_update']['data']
+        self.assertFalse(state['is_playing'])
+        self.assertEqual(state['position_ms'], 4321)
+        self.assertEqual(state['playback_revision'], 1)
+        await socket.disconnect()
+
     async def _playback_reconnect_scenario(self):
         socket = WebsocketCommunicator(
             application, f'/ws/room/{self.room.id}/'

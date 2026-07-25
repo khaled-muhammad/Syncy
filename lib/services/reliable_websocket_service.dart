@@ -183,6 +183,7 @@ class ReliableWebSocketService extends GetxService {
     _heartbeatTimer = null;
     _retryTimer?.cancel();
     _retryTimer = null;
+    _pending.removeWhere((_, message) => _isPlaybackMessage(message));
     final completer = _joinCompleter;
     if (completer != null && !completer.isCompleted) {
       completer.completeError(StateError(reason));
@@ -249,12 +250,7 @@ class ReliableWebSocketService extends GetxService {
     bool coalescePlayback = false,
   }) async {
     if (coalescePlayback) {
-      _pending.removeWhere(
-        (_, value) =>
-            value.type == MessageType.play ||
-            value.type == MessageType.pause ||
-            value.type == MessageType.seek,
-      );
+      _pending.removeWhere((_, value) => _isPlaybackMessage(value));
     }
     _pending[message.eventId] = message;
     if (isJoined.value) _sendNow(message);
@@ -281,6 +277,25 @@ class ReliableWebSocketService extends GetxService {
     _retryTimer = Timer.periodic(const Duration(seconds: 5), (_) {
       if (isJoined.value && _pending.isNotEmpty) _flushPending();
     });
+  }
+
+  bool _isPlaybackMessage(Message message) =>
+      message.type == MessageType.play ||
+      message.type == MessageType.pause ||
+      message.type == MessageType.seek;
+
+  Future<void> requestRoomState() async {
+    final roomId = _roomId;
+    final userId = _userId;
+    if (!isJoined.value || roomId == null || userId == null) return;
+    _sendNow(
+      Message(
+        type: MessageType.heartbeat,
+        roomId: roomId,
+        userId: userId,
+        data: const {'requestState': true},
+      ),
+    );
   }
 
   Future<void> playVideo(String roomId, String userId, Duration position) =>

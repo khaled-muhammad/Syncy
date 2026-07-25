@@ -360,13 +360,15 @@ class ControlsOverlayState extends State<ControlsOverlay> {
   }
 
   void _togglePlayPause() {
-    final bool newIsPlaying = !widget.controller.value.isPlaying;
-    if (newIsPlaying) {
-      widget.controller.play();
+    final bool newIsPlaying = !widget.roomController.room.value.isPlaying;
+    final callback = widget.onPlayToggle;
+    if (callback != null) {
+      callback(newIsPlaying);
+    } else if (newIsPlaying) {
+      unawaited(widget.controller.play());
     } else {
-      widget.controller.pause();
+      unawaited(widget.controller.pause());
     }
-    widget.onPlayToggle?.call(newIsPlaying);
 
     // Force immediate UI update
     setState(() {});
@@ -378,9 +380,12 @@ class ControlsOverlayState extends State<ControlsOverlay> {
     var target = value.position + offset;
     if (target < Duration.zero) target = Duration.zero;
     if (target > value.duration) target = value.duration;
-    widget.controller.seekTo(target);
-    // Broadcast so the whole room stays in sync.
-    widget.onSeek?.call(target);
+    final callback = widget.onSeek;
+    if (callback != null) {
+      callback(target);
+    } else {
+      unawaited(widget.controller.seekTo(target));
+    }
   }
 
   void _onSurfaceTapUp(double tapDx, double width) {
@@ -446,9 +451,7 @@ class ControlsOverlayState extends State<ControlsOverlay> {
         duration: const Duration(milliseconds: 180),
         curve: Curves.easeOut,
         child: Align(
-          alignment: isForward
-              ? Alignment.centerRight
-              : Alignment.centerLeft,
+          alignment: isForward ? Alignment.centerRight : Alignment.centerLeft,
           child: FractionallySizedBox(
             widthFactor: 0.5,
             heightFactor: 1,
@@ -671,8 +674,10 @@ class ControlsOverlayState extends State<ControlsOverlay> {
           child: LayoutBuilder(
             builder: (context, constraints) => GestureDetector(
               behavior: HitTestBehavior.opaque,
-              onTapUp: (details) =>
-                  _onSurfaceTapUp(details.localPosition.dx, constraints.maxWidth),
+              onTapUp: (details) => _onSurfaceTapUp(
+                details.localPosition.dx,
+                constraints.maxWidth,
+              ),
               child: const SizedBox.expand(),
             ),
           ),
@@ -703,32 +708,32 @@ class ControlsOverlayState extends State<ControlsOverlay> {
         IgnorePointer(
           ignoring: !_controlsVisible,
           child: AnimatedOpacity(
-          opacity: _controlsVisible ? 1.0 : 0.0,
-          duration: const Duration(milliseconds: 300),
-          child: Stack(
-                children: [
-                  // Non-interactive dim gradient: taps on empty areas fall
-                  // through to the surface gesture layer below.
-                  Positioned.fill(
-                    child: IgnorePointer(
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [
-                              Colors.black.withValues(alpha: 0.7),
-                              Colors.transparent,
-                              Colors.transparent,
-                              Colors.black.withValues(alpha: 0.7),
-                            ],
-                            stops: const [0.0, 0.3, 0.7, 1.0],
-                          ),
+            opacity: _controlsVisible ? 1.0 : 0.0,
+            duration: const Duration(milliseconds: 300),
+            child: Stack(
+              children: [
+                // Non-interactive dim gradient: taps on empty areas fall
+                // through to the surface gesture layer below.
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.black.withValues(alpha: 0.7),
+                            Colors.transparent,
+                            Colors.transparent,
+                            Colors.black.withValues(alpha: 0.7),
+                          ],
+                          stops: const [0.0, 0.3, 0.7, 1.0],
                         ),
                       ),
                     ),
                   ),
-                  /*Align(
+                ),
+                /*Align(
                     alignment: Alignment.topRight,
                     child: PopupMenuButton<double>(
                       initialValue: widget.controller.value.playbackSpeed,
@@ -771,248 +776,246 @@ class ControlsOverlayState extends State<ControlsOverlay> {
                       ),
                     ),
                   ),*/
-                  Align(
-                    alignment: Alignment.topRight,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        PopupMenuButton<String>(
-                          icon: Icon(Icons.subtitles, color: Colors.white),
-                          tooltip: 'Subtitle Options',
-                          onSelected: (String value) {
-                            final roomController = widget.roomController;
-                            if (value == 'select') {
-                              roomController.selectSubtitleFile();
-                            } else if (value == 'clear') {
-                              roomController.clearSubtitle();
-                            } else if (value == 'delay') {
-                              _showSubtitleDelayDialog(context);
-                            }
-                            _resetHideTimer();
-                          },
-                          itemBuilder: (BuildContext context) {
-                            final roomController = widget.roomController;
-                            return [
+                Align(
+                  alignment: Alignment.topRight,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      PopupMenuButton<String>(
+                        icon: Icon(Icons.subtitles, color: Colors.white),
+                        tooltip: 'Subtitle Options',
+                        onSelected: (String value) {
+                          final roomController = widget.roomController;
+                          if (value == 'select') {
+                            roomController.selectSubtitleFile();
+                          } else if (value == 'clear') {
+                            roomController.clearSubtitle();
+                          } else if (value == 'delay') {
+                            _showSubtitleDelayDialog(context);
+                          }
+                          _resetHideTimer();
+                        },
+                        itemBuilder: (BuildContext context) {
+                          final roomController = widget.roomController;
+                          return [
+                            PopupMenuItem<String>(
+                              value: 'select',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.file_upload, size: 16),
+                                  SizedBox(width: 8),
+                                  Text('Select Subtitle'),
+                                ],
+                              ),
+                            ),
+                            if (roomController.currentSubtitlePath.value !=
+                                null) ...[
                               PopupMenuItem<String>(
-                                value: 'select',
+                                value: 'delay',
                                 child: Row(
                                   children: [
-                                    Icon(Icons.file_upload, size: 16),
+                                    Icon(Icons.schedule, size: 16),
                                     SizedBox(width: 8),
-                                    Text('Select Subtitle'),
+                                    Text(
+                                      'Adjust Delay (${roomController.subtitleDelay.value}ms)',
+                                    ),
                                   ],
                                 ),
                               ),
-                              if (roomController.currentSubtitlePath.value !=
-                                  null) ...[
-                                PopupMenuItem<String>(
-                                  value: 'delay',
+                              PopupMenuItem<String>(
+                                value: 'clear',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.clear, size: 16),
+                                    SizedBox(width: 8),
+                                    Text('Clear Subtitle'),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ];
+                        },
+                      ),
+                      IconButton(
+                        icon: Icon(Icons.fullscreen, color: Colors.white),
+                        onPressed: () {
+                          _toggleFullScreen();
+                          _resetHideTimer();
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+                Positioned.fill(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      Expanded(
+                        child: Center(
+                          child: Padding(
+                            padding: const EdgeInsets.only(top: 16),
+                            child: GestureDetector(
+                              onTap: () {
+                                _togglePlayPause();
+                                _resetHideTimer();
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withValues(alpha: 0.6),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(
+                                  widget.controller.value.isPlaying
+                                      ? HeroIcons.pause
+                                      : HeroIcons.play,
+                                  color: Colors.white,
+                                  size: 50,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16.0,
+                          vertical: 0,
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.only(
+                            topLeft: Radius.circular(16),
+                            topRight: Radius.circular(16),
+                          ),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              //horizontal: 16.0,
+                              // vertical: 6.0,
+                            ),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.only(
+                                topLeft: Radius.circular(16),
+                                topRight: Radius.circular(16),
+                              ),
+                              color: Colors.black.withValues(alpha: 0.7),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.3),
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Container(
+                                  padding: EdgeInsets.symmetric(
+                                    vertical: 2,
+                                    horizontal: 6,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      colors: [
+                                        Colors.purple,
+                                        Colors.deepPurpleAccent,
+                                      ],
+                                    ),
+                                    borderRadius: BorderRadius.only(
+                                      bottomRight: Radius.circular(16),
+                                    ),
+                                  ),
                                   child: Row(
+                                    mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      Icon(Icons.schedule, size: 16),
-                                      SizedBox(width: 8),
                                       Text(
-                                        'Adjust Delay (${roomController.subtitleDelay.value}ms)',
+                                        _formatDuration(
+                                          widget.controller.value.position,
+                                        ),
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                      Text(" / "),
+                                      Text(
+                                        _formatDuration(
+                                          widget.controller.value.duration,
+                                        ),
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w500,
+                                        ),
                                       ),
                                     ],
                                   ),
                                 ),
-                                PopupMenuItem<String>(
-                                  value: 'clear',
-                                  child: Row(
-                                    children: [
-                                      Icon(Icons.clear, size: 16),
-                                      SizedBox(width: 8),
-                                      Text('Clear Subtitle'),
-                                    ],
+                                const SizedBox(height: 4),
+                                SliderTheme(
+                                  data: SliderTheme.of(context).copyWith(
+                                    activeTrackColor: Colors.deepPurpleAccent,
+                                    inactiveTrackColor: Colors.deepPurpleAccent
+                                        .withValues(alpha: 0.3),
+                                    thumbColor: Colors.white,
+                                    overlayColor: Colors.deepPurpleAccent
+                                        .withValues(alpha: 0.2),
+                                    thumbShape: const RoundSliderThumbShape(
+                                      enabledThumbRadius: 8,
+                                    ),
+                                    overlayShape: const RoundSliderOverlayShape(
+                                      overlayRadius: 16,
+                                    ),
+                                    trackHeight: 6,
+                                  ),
+                                  child: Slider(
+                                    value:
+                                        widget
+                                                .controller
+                                                .value
+                                                .duration
+                                                .inMilliseconds >
+                                            0
+                                        ? widget
+                                              .controller
+                                              .value
+                                              .position
+                                              .inMilliseconds
+                                              .toDouble()
+                                        : 0.0,
+                                    min: 0.0,
+                                    max: widget
+                                        .controller
+                                        .value
+                                        .duration
+                                        .inMilliseconds
+                                        .toDouble(),
+                                    onChanged: (value) {
+                                      final newPosition = Duration(
+                                        milliseconds: value.toInt(),
+                                      );
+                                      widget.controller.seekTo(newPosition);
+                                      if (widget.onSeek != null) {
+                                        widget.onSeek!(newPosition);
+                                      }
+                                      _resetHideTimer();
+                                    },
                                   ),
                                 ),
                               ],
-                            ];
-                          },
+                            ),
+                          ),
                         ),
-                        IconButton(
-                          icon: Icon(Icons.fullscreen, color: Colors.white),
-                          onPressed: () {
-                            _toggleFullScreen();
-                            _resetHideTimer();
-                          },
-                        ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
-                  Positioned.fill(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        Expanded(
-                          child: Center(
-                            child: Padding(
-                              padding: const EdgeInsets.only(top: 16),
-                              child: GestureDetector(
-                                onTap: () {
-                                  _togglePlayPause();
-                                  _resetHideTimer();
-                                },
-                                child: Container(
-                                  padding: const EdgeInsets.all(16),
-                                  decoration: BoxDecoration(
-                                    color: Colors.black.withValues(alpha: 0.6),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: Icon(
-                                    widget.controller.value.isPlaying
-                                        ? HeroIcons.pause
-                                        : HeroIcons.play,
-                                    color: Colors.white,
-                                    size: 50,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16.0,
-                            vertical: 0,
-                          ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.only(
-                              topLeft: Radius.circular(16),
-                              topRight: Radius.circular(16),
-                            ),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                //horizontal: 16.0,
-                                // vertical: 6.0,
-                              ),
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.only(
-                                  topLeft: Radius.circular(16),
-                                  topRight: Radius.circular(16),
-                                ),
-                                color: Colors.black.withValues(alpha: 0.7),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.3),
-                                    blurRadius: 10,
-                                    offset: const Offset(0, 4),
-                                  ),
-                                ],
-                              ),
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Container(
-                                    padding: EdgeInsets.symmetric(
-                                      vertical: 2,
-                                      horizontal: 6,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      gradient: LinearGradient(
-                                        colors: [
-                                          Colors.purple,
-                                          Colors.deepPurpleAccent,
-                                        ],
-                                      ),
-                                      borderRadius: BorderRadius.only(
-                                        bottomRight: Radius.circular(16),
-                                      ),
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Text(
-                                          _formatDuration(
-                                            widget.controller.value.position,
-                                          ),
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 14,
-                                            fontWeight: FontWeight.w500,
-                                          ),
-                                        ),
-                                        Text(" / "),
-                                        Text(
-                                          _formatDuration(
-                                            widget.controller.value.duration,
-                                          ),
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 14,
-                                            fontWeight: FontWeight.w500,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  SliderTheme(
-                                    data: SliderTheme.of(context).copyWith(
-                                      activeTrackColor: Colors.deepPurpleAccent,
-                                      inactiveTrackColor: Colors
-                                          .deepPurpleAccent
-                                          .withValues(alpha: 0.3),
-                                      thumbColor: Colors.white,
-                                      overlayColor: Colors.deepPurpleAccent
-                                          .withValues(alpha: 0.2),
-                                      thumbShape: const RoundSliderThumbShape(
-                                        enabledThumbRadius: 8,
-                                      ),
-                                      overlayShape:
-                                          const RoundSliderOverlayShape(
-                                            overlayRadius: 16,
-                                          ),
-                                      trackHeight: 6,
-                                    ),
-                                    child: Slider(
-                                      value:
-                                          widget
-                                                  .controller
-                                                  .value
-                                                  .duration
-                                                  .inMilliseconds >
-                                              0
-                                          ? widget
-                                                .controller
-                                                .value
-                                                .position
-                                                .inMilliseconds
-                                                .toDouble()
-                                          : 0.0,
-                                      min: 0.0,
-                                      max: widget
-                                          .controller
-                                          .value
-                                          .duration
-                                          .inMilliseconds
-                                          .toDouble(),
-                                      onChanged: (value) {
-                                        final newPosition = Duration(
-                                          milliseconds: value.toInt(),
-                                        );
-                                        widget.controller.seekTo(newPosition);
-                                        if (widget.onSeek != null) {
-                                          widget.onSeek!(newPosition);
-                                        }
-                                        _resetHideTimer();
-                                      },
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
+        ),
         // Transient seek feedback (never absorbs touches).
         Positioned.fill(child: _buildSeekFeedback()),
       ],

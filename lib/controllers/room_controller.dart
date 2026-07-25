@@ -11,6 +11,7 @@ import 'package:syncy/models/media.dart';
 import 'package:syncy/models/room.dart';
 import 'package:syncy/models/user.dart';
 import 'package:syncy/routes/app_routes.dart';
+import 'package:syncy/services/player/playback_synchronizer.dart';
 import 'package:syncy/services/player/sync_player.dart';
 import 'package:syncy/services/reliable_websocket_service.dart';
 import 'package:syncy/utils/native_pickers.dart';
@@ -23,7 +24,7 @@ class RoomUser {
   const RoomUser({required this.id, required this.name, required this.online});
 }
 
-class RoomController extends GetxController {
+class RoomController extends GetxController with WidgetsBindingObserver {
   final isar = Get.find<Isar>();
 
   User get user {
@@ -70,7 +71,7 @@ class RoomController extends GetxController {
 
   SyncPlayer? videoController;
   int _lastPlaybackRevision = -1;
-  Map<String, dynamic>? _pendingPlaybackState;
+  late final PlaybackSynchronizer _playbackSynchronizer;
   final RxBool isMediaLoading = false.obs;
   final RxBool isApplyingSync = false.obs;
   final RxString mediaLoadMessage = 'Preparing media…'.obs;
@@ -96,6 +97,17 @@ class RoomController extends GetxController {
   @override
   void onInit() {
     super.onInit();
+    WidgetsBinding.instance.addObserver(this);
+    _playbackSynchronizer = PlaybackSynchronizer(
+      onApplyingChanged: (applying) {
+        isApplyingSync.value = applying;
+        syncStatus.value = applying
+            ? 'Syncing playback...'
+            : wsService.isJoined.value
+            ? 'Synced'
+            : 'Reconnecting...';
+      },
+    );
 
     wsService.setConnectionCallbacks(
       onConnected: () => syncStatus.value = 'Synced',
@@ -160,6 +172,21 @@ class RoomController extends GetxController {
 
   List<String> get typingUserNames =>
       typingUsers.values.toList(growable: false);
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // Wait for a fresh server snapshot before allowing a paused Android
+      // surface to start itself again.
+      _playbackSynchronizer.setActive(false);
+      if (room.value.id.isNotEmpty) {
+        syncStatus.value = 'Refreshing playback...';
+        unawaited(wsService.requestRoomState());
+      }
+      return;
+    }
+    _playbackSynchronizer.setActive(false);
+  }
 
   void _applyTypingState(Message message) {
     final userId =
@@ -228,6 +255,7 @@ class RoomController extends GetxController {
   }
 
   void _applyRemoteMediaChange(Map<String, dynamic> data) {
+    if (_revisionOf(data) < _lastPlaybackRevision) return;
     final title =
         data['current_video_title']?.toString() ??
         data['videoTitle']?.toString();
@@ -253,7 +281,12 @@ class RoomController extends GetxController {
       currentPosition: Duration.zero,
       isPlaying: false,
     );
-    unawaited(videoController?.pause());
+    unawaited(
+      _playbackSynchronizer.submitLocal(
+        position: Duration.zero,
+        isPlaying: false,
+      ),
+    );
 
     if (!alreadyLoaded) {
       if (isStream) {
@@ -289,10 +322,7 @@ class RoomController extends GetxController {
     Map<String, dynamic> state, {
     MessageType? fallbackType,
   }) async {
-    final revision =
-        (state['playback_revision'] as num?)?.toInt() ??
-        (state['revision'] as num?)?.toInt() ??
-        0;
+    final revision = _revisionOf(state);
     if (revision < _lastPlaybackRevision) return;
     _lastPlaybackRevision = revision;
 
@@ -321,50 +351,47 @@ class RoomController extends GetxController {
       }
     }
 
-    final normalized = <String, dynamic>{
-      ...state,
-      'position_ms': positionMs,
-      'is_playing': isPlaying,
-      'playback_revision': revision,
-    };
     room.value = room.value.copyWith(
       currentPosition: Duration(milliseconds: positionMs),
       isPlaying: isPlaying,
     );
 
-    final player = videoController;
-    if (player == null || !player.value.isInitialized) {
-      _pendingPlaybackState = normalized;
-      return;
+    final lifecycleState = WidgetsBinding.instance.lifecycleState;
+    if (lifecycleState == null || lifecycleState == AppLifecycleState.resumed) {
+      _playbackSynchronizer.setActive(true);
     }
-    _pendingPlaybackState = null;
-    isApplyingSync.value = true;
-    syncStatus.value = 'Syncing playback…';
-    try {
-      final requested = Duration(milliseconds: positionMs);
-      final target = requested < Duration.zero
-          ? Duration.zero
-          : requested > player.value.duration
-          ? player.value.duration
-          : requested;
-      if ((player.value.position - target).abs() >
-          const Duration(milliseconds: 250)) {
-        await player.seekTo(target);
-      }
-      if (isPlaying && !player.value.isPlaying) {
-        await player.play();
-      } else if (!isPlaying && player.value.isPlaying) {
-        await player.pause();
-      }
-    } finally {
-      isApplyingSync.value = false;
-      syncStatus.value = wsService.isJoined.value ? 'Synced' : 'Reconnecting…';
+    await _playbackSynchronizer.submitAuthoritative(
+      PlaybackSyncState(
+        revision: revision,
+        position: Duration(milliseconds: positionMs),
+        isPlaying: isPlaying,
+        receivedAt: DateTime.now(),
+      ),
+    );
+  }
+
+  int _revisionOf(Map<String, dynamic> state) =>
+      (state['playback_revision'] as num?)?.toInt() ??
+      (state['revision'] as num?)?.toInt() ??
+      0;
+
+  void attachVideoController(SyncPlayer player) {
+    videoController = player;
+    _playbackSynchronizer.attach(player);
+  }
+
+  void detachVideoController([SyncPlayer? player]) {
+    _playbackSynchronizer.detach(player);
+    if (player == null || identical(videoController, player)) {
+      videoController = null;
     }
   }
 
-  Future<void> onPlayerReady() async {
-    final state = _pendingPlaybackState;
-    if (state != null) await _applyPlaybackState(state);
+  Future<void> onPlayerReady() => _playbackSynchronizer.reconcile();
+
+  void _resetPlaybackSync() {
+    _lastPlaybackRevision = -1;
+    _playbackSynchronizer.clear();
   }
 
   void beginMediaLoad([String message = 'Loading media…']) {
@@ -417,6 +444,16 @@ class RoomController extends GetxController {
     currentSubtitlePath.value = null;
     requiresMediaSelection.value = false;
     beginMediaLoad('Loading ${media.name}…');
+    room.value = room.value.copyWith(
+      currentPosition: Duration.zero,
+      isPlaying: false,
+    );
+    unawaited(
+      _playbackSynchronizer.submitLocal(
+        position: Duration.zero,
+        isPlaying: false,
+      ),
+    );
     if (_uuid == room.value.hostId && room.value.id.isNotEmpty) {
       unawaited(wsService.changeVideo(room.value.id, _uuid, media.name));
     }
@@ -451,8 +488,7 @@ class RoomController extends GetxController {
     }
   }
 
-  String _fileNameOf(String path) =>
-      path.replaceAll('\\', '/').split('/').last;
+  String _fileNameOf(String path) => path.replaceAll('\\', '/').split('/').last;
 
   // Method to clear subtitle
   void clearSubtitle() {
@@ -506,6 +542,7 @@ class RoomController extends GetxController {
       );
 
       if (res.data['status'] == 'success') {
+        _resetPlaybackSync();
         room.value = Room.fromJson(res.data['room']);
         if (streamUrl != null && streamUrl.isNotEmpty) {
           // Media hosted on a PC over the LAN: peers stream the same URL.
@@ -571,6 +608,7 @@ class RoomController extends GetxController {
           colorText: Colors.white,
           snackPosition: SnackPosition.TOP,
         );
+        _resetPlaybackSync();
         room.value = Room.fromJson(res.data['room']);
         _uuid = res.data['user']['id'].toString();
         users.clear();
@@ -638,38 +676,60 @@ class RoomController extends GetxController {
   }
 
   Future<void> playVideo() async {
-    Duration? position = await videoController?.position;
-    if (room.value.id == '') {
+    if (room.value.id.isEmpty || !wsService.isJoined.value) {
+      unawaited(wsService.requestRoomState());
       return;
     }
+    final position =
+        videoController?.value.position ?? room.value.currentPosition;
 
     room.value = room.value.copyWith(
       isPlaying: true,
       currentPosition: position,
     );
-
-    await wsService.playVideo(room.value.id, _uuid, position ?? Duration.zero);
+    unawaited(
+      _playbackSynchronizer.submitLocal(
+        position: position,
+        isPlaying: true,
+      ),
+    );
+    await wsService.playVideo(room.value.id, _uuid, position);
   }
 
   Future<void> pauseVideo() async {
-    Duration? position = await videoController?.position;
-    if (room.value.id == '') {
+    if (room.value.id.isEmpty || !wsService.isJoined.value) {
+      unawaited(wsService.requestRoomState());
       return;
     }
+    final position =
+        videoController?.value.position ?? room.value.currentPosition;
 
     room.value = room.value.copyWith(
       isPlaying: false,
       currentPosition: position,
     );
-
-    await wsService.pauseVideo(room.value.id, _uuid, position ?? Duration.zero);
+    unawaited(
+      _playbackSynchronizer.submitLocal(
+        position: position,
+        isPlaying: false,
+      ),
+    );
+    await wsService.pauseVideo(room.value.id, _uuid, position);
   }
 
   Future<void> seekVideo(Duration position) async {
-    if (room.value.id == '') return;
+    if (room.value.id.isEmpty || !wsService.isJoined.value) {
+      unawaited(wsService.requestRoomState());
+      return;
+    }
 
     room.value = room.value.copyWith(currentPosition: position);
-
+    unawaited(
+      _playbackSynchronizer.submitLocal(
+        position: position,
+        isPlaying: room.value.isPlaying,
+      ),
+    );
     await wsService.seekVideo(room.value.id, _uuid, position);
   }
 
@@ -693,6 +753,7 @@ class RoomController extends GetxController {
       _localTypingIdleTimer?.cancel();
       _localTypingActive = false;
       _lastTypingSignalAt = null;
+      _resetPlaybackSync();
       room.value = Room(
         createdAt: DateTime.now(),
         id: '',
@@ -755,6 +816,8 @@ class RoomController extends GetxController {
 
   @override
   void onClose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _playbackSynchronizer.dispose();
     _localTypingIdleTimer?.cancel();
     _clearTypingUsers();
     super.onClose();
