@@ -7,10 +7,7 @@ allprojects {
 
 val newBuildDir: Directory =
     rootProject.layout.buildDirectory
-        // The original build directory was copied from macOS and contains
-        // entries Windows cannot replace. Keep generated Android output in a
-        // clean, project-local directory so normal Flutter builds are reliable.
-        .dir("../../.flutter_build")
+        .dir("../../build")
         .get()
 rootProject.layout.buildDirectory.value(newBuildDir)
 
