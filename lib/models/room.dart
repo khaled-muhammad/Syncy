@@ -1,4 +1,4 @@
-enum RoomMode { friends, couple }
+enum RoomMode { friends, couple, party, horror, roast, movieClub }
 
 class Room {
   String id;

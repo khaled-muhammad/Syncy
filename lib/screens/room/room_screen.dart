@@ -12,11 +12,15 @@ import 'package:syncy/controllers/library_controller.dart';
 import 'package:syncy/controllers/room_controller.dart';
 import 'package:syncy/screens/search/seach_screen.dart';
 import 'package:syncy/widgets/adaptive_sheet.dart';
+import 'package:syncy/widgets/ambient_video_surface.dart';
 import 'package:syncy/widgets/enhanced_chat_panel.dart';
 import 'package:syncy/widgets/custom_video_player.dart';
 import 'package:syncy/widgets/reliable_reaction_overlay.dart';
 import 'package:syncy/widgets/native_purple_mesh_background.dart';
+import 'package:syncy/widgets/session_scorecard.dart';
+import 'package:syncy/widgets/watch_lobby.dart';
 import 'package:syncy/services/player/sync_player_factory.dart';
+import 'package:syncy/models/room_preset.dart';
 import 'package:syncy/utils/platform_utils.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
@@ -99,6 +103,12 @@ class _RoomScreenState extends State<RoomScreen> {
           player.value.errorDescription ?? 'stream error',
         );
       }
+      unawaited(
+        controller.recordPlaybackProgress(
+          player.value.position,
+          duration: player.value.duration,
+        ),
+      );
       setState(() {});
     });
     try {
@@ -145,76 +155,87 @@ class _RoomScreenState extends State<RoomScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return NativePurpleMeshBackground(
-      child: Stack(
-        children: [
-          Scaffold(
-            resizeToAvoidBottomInset: true,
-            appBar: AppBar(
-              title: Text(controller.room.value.name),
-              centerTitle: true,
-              backgroundColor: Colors.transparent,
-              leading: IconButton(
-                onPressed: exitPop,
-                icon: const Icon(Icons.exit_to_app_rounded),
-              ),
-              actions: [
-                Center(child: _SyncStatusPill(controller: controller)),
-                IconButton(
-                  onPressed: () {
-                    Clipboard.setData(
-                      ClipboardData(text: controller.room.value.id),
-                    ).then((_) {
-                      Get.snackbar(
-                        'Copied',
-                        'The room ID was copied successfully!',
-                      );
-                    });
-                  },
-                  icon: Icon(Icons.share_rounded),
+    return Obx(
+      () => NativePurpleMeshBackground(
+        accent: controller.room.value.mode.preset.accent,
+        child: Stack(
+          children: [
+            Scaffold(
+              resizeToAvoidBottomInset: true,
+              appBar: AppBar(
+                title: Text(controller.room.value.name),
+                centerTitle: true,
+                backgroundColor: Colors.transparent,
+                leading: IconButton(
+                  onPressed: exitPop,
+                  icon: const Icon(Icons.exit_to_app_rounded),
                 ),
-                IconButton(
-                  onPressed: () {
-                    showAdaptiveSheet(
-                      ClipRRect(
-                        child: BackdropFilter(
-                          filter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
-                          child: Container(
-                            width: double.infinity,
-                            decoration: BoxDecoration(
-                              color: Colors.purple.withAlpha(100),
-                              borderRadius: BorderRadius.only(
-                                topLeft: Radius.circular(26),
-                                topRight: Radius.circular(26),
+                actions: [
+                  Center(child: _SyncStatusPill(controller: controller)),
+                  IconButton(
+                    tooltip: 'Session scorecard',
+                    onPressed: () => controller.showScorecard.value = true,
+                    icon: const Icon(Icons.auto_awesome_rounded),
+                  ),
+                  IconButton(
+                    onPressed: () {
+                      Clipboard.setData(
+                        ClipboardData(text: controller.room.value.id),
+                      ).then((_) {
+                        Get.snackbar(
+                          'Copied',
+                          'The room ID was copied successfully!',
+                        );
+                      });
+                    },
+                    icon: Icon(Icons.share_rounded),
+                  ),
+                  IconButton(
+                    onPressed: () {
+                      showAdaptiveSheet(
+                        ClipRRect(
+                          child: BackdropFilter(
+                            filter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
+                            child: Container(
+                              width: double.infinity,
+                              decoration: BoxDecoration(
+                                color: Colors.purple.withAlpha(100),
+                                borderRadius: BorderRadius.only(
+                                  topLeft: Radius.circular(26),
+                                  topRight: Radius.circular(26),
+                                ),
                               ),
-                            ),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                vertical: 12,
-                                horizontal: 6,
-                              ),
-                              child: Obx(
-                                () => ListView.builder(
-                                  itemCount: controller.users.length,
-                                  itemBuilder: (ctx, i) => ListTile(
-                                    title: Text(controller.users[i].name),
-                                    trailing: AnimatedContainer(
-                                      duration: const Duration(
-                                        milliseconds: 250,
-                                      ),
-                                      width: 15,
-                                      height: 15,
-                                      decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        gradient: LinearGradient(
-                                          colors: controller.users[i].online
-                                              ? [
-                                                  Colors.greenAccent,
-                                                  Colors.green,
-                                                ]
-                                              : [Colors.redAccent, Colors.red],
-                                          // center: Alignment.center,
-                                          // radius: 0.8,
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 12,
+                                  horizontal: 6,
+                                ),
+                                child: Obx(
+                                  () => ListView.builder(
+                                    itemCount: controller.users.length,
+                                    itemBuilder: (ctx, i) => ListTile(
+                                      title: Text(controller.users[i].name),
+                                      trailing: AnimatedContainer(
+                                        duration: const Duration(
+                                          milliseconds: 250,
+                                        ),
+                                        width: 15,
+                                        height: 15,
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          gradient: LinearGradient(
+                                            colors: controller.users[i].online
+                                                ? [
+                                                    Colors.greenAccent,
+                                                    Colors.green,
+                                                  ]
+                                                : [
+                                                    Colors.redAccent,
+                                                    Colors.red,
+                                                  ],
+                                            // center: Alignment.center,
+                                            // radius: 0.8,
+                                          ),
                                         ),
                                       ),
                                     ),
@@ -224,38 +245,59 @@ class _RoomScreenState extends State<RoomScreen> {
                             ),
                           ),
                         ),
-                      ),
+                      );
+                    },
+                    icon: Icon(Iconsax.profile_2user_outline),
+                  ),
+                ],
+              ),
+              backgroundColor: Colors.transparent,
+              body: PopScope(
+                canPop: false,
+                onPopInvokedWithResult: (didPop, result) {
+                  if (!didPop) exitPop();
+                },
+                child: Builder(
+                  builder: (context) {
+                    final keyboardOpen =
+                        MediaQuery.of(context).viewInsets.bottom > 0;
+                    return Stack(
+                      children: [
+                        if (isDesktop)
+                          _buildDesktopBody()
+                        else
+                          _buildMobileBody(context, keyboardOpen),
+                        // Floating reactions overlay
+                        ReactionOverlay(controller: controller),
+                        Obx(
+                          () => controller.lobbyVisible.value
+                              ? Positioned.fill(
+                                  child: WatchLobby(
+                                    controller: controller,
+                                    onStart: controller.startMovieFromLobby,
+                                  ),
+                                )
+                              : const SizedBox.shrink(),
+                        ),
+                        Obx(
+                          () => controller.showScorecard.value
+                              ? Positioned.fill(
+                                  child: SessionScorecard(
+                                    controller: controller,
+                                    onClose: () =>
+                                        controller.showScorecard.value = false,
+                                  ),
+                                )
+                              : const SizedBox.shrink(),
+                        ),
+                      ],
                     );
                   },
-                  icon: Icon(Iconsax.profile_2user_outline),
                 ),
-              ],
-            ),
-            backgroundColor: Colors.transparent,
-            body: PopScope(
-              canPop: false,
-              onPopInvokedWithResult: (didPop, result) {
-                if (!didPop) exitPop();
-              },
-              child: Builder(
-                builder: (context) {
-                  final keyboardOpen =
-                      MediaQuery.of(context).viewInsets.bottom > 0;
-                  return Stack(
-                    children: [
-                      if (isDesktop)
-                        _buildDesktopBody()
-                      else
-                        _buildMobileBody(context, keyboardOpen),
-                      // Floating reactions overlay
-                      ReactionOverlay(controller: controller),
-                    ],
-                  );
-                },
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -342,7 +384,10 @@ class _RoomScreenState extends State<RoomScreen> {
       aspectRatio: player.value.aspectRatio,
       child: Stack(
         children: [
-          player.buildSurface(),
+          AmbientVideoSurface(
+            fallback: controller.room.value.mode.preset.accent,
+            child: player.buildSurface(),
+          ),
           ControlsOverlay(
             controller: player,
             roomController: controller,

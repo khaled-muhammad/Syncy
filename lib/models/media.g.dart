@@ -715,12 +715,62 @@ const MediaSchema = CollectionSchema(
   name: r'Media',
   id: 6434281596432674333,
   properties: {
-    r'name': PropertySchema(id: 0, name: r'name', type: IsarType.string),
-    r'path': PropertySchema(id: 1, name: r'path', type: IsarType.string),
-    r'thumbnailPath': PropertySchema(
+    r'addedAt': PropertySchema(
+      id: 0,
+      name: r'addedAt',
+      type: IsarType.dateTime,
+    ),
+    r'dominantColorValue': PropertySchema(
+      id: 1,
+      name: r'dominantColorValue',
+      type: IsarType.long,
+    ),
+    r'durationMs': PropertySchema(
       id: 2,
+      name: r'durationMs',
+      type: IsarType.long,
+    ),
+    r'hasSubtitles': PropertySchema(
+      id: 3,
+      name: r'hasSubtitles',
+      type: IsarType.bool,
+    ),
+    r'isFinished': PropertySchema(
+      id: 4,
+      name: r'isFinished',
+      type: IsarType.bool,
+    ),
+    r'lastWatchedAt': PropertySchema(
+      id: 5,
+      name: r'lastWatchedAt',
+      type: IsarType.dateTime,
+    ),
+    r'name': PropertySchema(id: 6, name: r'name', type: IsarType.string),
+    r'path': PropertySchema(id: 7, name: r'path', type: IsarType.string),
+    r'playbackPositionMs': PropertySchema(
+      id: 8,
+      name: r'playbackPositionMs',
+      type: IsarType.long,
+    ),
+    r'thumbnailPath': PropertySchema(
+      id: 9,
       name: r'thumbnailPath',
       type: IsarType.string,
+    ),
+    r'watchedFraction': PropertySchema(
+      id: 10,
+      name: r'watchedFraction',
+      type: IsarType.double,
+    ),
+    r'watchedTogetherAt': PropertySchema(
+      id: 11,
+      name: r'watchedTogetherAt',
+      type: IsarType.dateTime,
+    ),
+    r'watchedWith': PropertySchema(
+      id: 12,
+      name: r'watchedWith',
+      type: IsarType.stringList,
     ),
   },
 
@@ -761,6 +811,13 @@ int _mediaEstimateSize(
       bytesCount += 3 + value.length * 3;
     }
   }
+  bytesCount += 3 + object.watchedWith.length * 3;
+  {
+    for (var i = 0; i < object.watchedWith.length; i++) {
+      final value = object.watchedWith[i];
+      bytesCount += value.length * 3;
+    }
+  }
   return bytesCount;
 }
 
@@ -770,9 +827,19 @@ void _mediaSerialize(
   List<int> offsets,
   Map<Type, List<int>> allOffsets,
 ) {
-  writer.writeString(offsets[0], object.name);
-  writer.writeString(offsets[1], object.path);
-  writer.writeString(offsets[2], object.thumbnailPath);
+  writer.writeDateTime(offsets[0], object.addedAt);
+  writer.writeLong(offsets[1], object.dominantColorValue);
+  writer.writeLong(offsets[2], object.durationMs);
+  writer.writeBool(offsets[3], object.hasSubtitles);
+  writer.writeBool(offsets[4], object.isFinished);
+  writer.writeDateTime(offsets[5], object.lastWatchedAt);
+  writer.writeString(offsets[6], object.name);
+  writer.writeString(offsets[7], object.path);
+  writer.writeLong(offsets[8], object.playbackPositionMs);
+  writer.writeString(offsets[9], object.thumbnailPath);
+  writer.writeDouble(offsets[10], object.watchedFraction);
+  writer.writeDateTime(offsets[11], object.watchedTogetherAt);
+  writer.writeStringList(offsets[12], object.watchedWith);
 }
 
 Media _mediaDeserialize(
@@ -782,10 +849,18 @@ Media _mediaDeserialize(
   Map<Type, List<int>> allOffsets,
 ) {
   final object = Media();
+  object.addedAt = reader.readDateTimeOrNull(offsets[0]);
+  object.dominantColorValue = reader.readLong(offsets[1]);
+  object.durationMs = reader.readLong(offsets[2]);
+  object.hasSubtitles = reader.readBool(offsets[3]);
   object.id = id;
-  object.name = reader.readString(offsets[0]);
-  object.path = reader.readString(offsets[1]);
-  object.thumbnailPath = reader.readStringOrNull(offsets[2]);
+  object.lastWatchedAt = reader.readDateTimeOrNull(offsets[5]);
+  object.name = reader.readString(offsets[6]);
+  object.path = reader.readString(offsets[7]);
+  object.playbackPositionMs = reader.readLong(offsets[8]);
+  object.thumbnailPath = reader.readStringOrNull(offsets[9]);
+  object.watchedTogetherAt = reader.readDateTimeOrNull(offsets[11]);
+  object.watchedWith = reader.readStringList(offsets[12]) ?? [];
   return object;
 }
 
@@ -797,11 +872,31 @@ P _mediaDeserializeProp<P>(
 ) {
   switch (propertyId) {
     case 0:
-      return (reader.readString(offset)) as P;
+      return (reader.readDateTimeOrNull(offset)) as P;
     case 1:
-      return (reader.readString(offset)) as P;
+      return (reader.readLong(offset)) as P;
     case 2:
+      return (reader.readLong(offset)) as P;
+    case 3:
+      return (reader.readBool(offset)) as P;
+    case 4:
+      return (reader.readBool(offset)) as P;
+    case 5:
+      return (reader.readDateTimeOrNull(offset)) as P;
+    case 6:
+      return (reader.readString(offset)) as P;
+    case 7:
+      return (reader.readString(offset)) as P;
+    case 8:
+      return (reader.readLong(offset)) as P;
+    case 9:
       return (reader.readStringOrNull(offset)) as P;
+    case 10:
+      return (reader.readDouble(offset)) as P;
+    case 11:
+      return (reader.readDateTimeOrNull(offset)) as P;
+    case 12:
+      return (reader.readStringList(offset) ?? []) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
   }
@@ -899,6 +994,207 @@ extension MediaQueryWhere on QueryBuilder<Media, Media, QWhereClause> {
 }
 
 extension MediaQueryFilter on QueryBuilder<Media, Media, QFilterCondition> {
+  QueryBuilder<Media, Media, QAfterFilterCondition> addedAtIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        const FilterCondition.isNull(property: r'addedAt'),
+      );
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterFilterCondition> addedAtIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        const FilterCondition.isNotNull(property: r'addedAt'),
+      );
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterFilterCondition> addedAtEqualTo(
+    DateTime? value,
+  ) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.equalTo(property: r'addedAt', value: value),
+      );
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterFilterCondition> addedAtGreaterThan(
+    DateTime? value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(
+          include: include,
+          property: r'addedAt',
+          value: value,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterFilterCondition> addedAtLessThan(
+    DateTime? value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.lessThan(
+          include: include,
+          property: r'addedAt',
+          value: value,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterFilterCondition> addedAtBetween(
+    DateTime? lower,
+    DateTime? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.between(
+          property: r'addedAt',
+          lower: lower,
+          includeLower: includeLower,
+          upper: upper,
+          includeUpper: includeUpper,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterFilterCondition> dominantColorValueEqualTo(
+    int value,
+  ) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.equalTo(property: r'dominantColorValue', value: value),
+      );
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterFilterCondition>
+  dominantColorValueGreaterThan(int value, {bool include = false}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(
+          include: include,
+          property: r'dominantColorValue',
+          value: value,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterFilterCondition> dominantColorValueLessThan(
+    int value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.lessThan(
+          include: include,
+          property: r'dominantColorValue',
+          value: value,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterFilterCondition> dominantColorValueBetween(
+    int lower,
+    int upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.between(
+          property: r'dominantColorValue',
+          lower: lower,
+          includeLower: includeLower,
+          upper: upper,
+          includeUpper: includeUpper,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterFilterCondition> durationMsEqualTo(
+    int value,
+  ) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.equalTo(property: r'durationMs', value: value),
+      );
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterFilterCondition> durationMsGreaterThan(
+    int value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(
+          include: include,
+          property: r'durationMs',
+          value: value,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterFilterCondition> durationMsLessThan(
+    int value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.lessThan(
+          include: include,
+          property: r'durationMs',
+          value: value,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterFilterCondition> durationMsBetween(
+    int lower,
+    int upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.between(
+          property: r'durationMs',
+          lower: lower,
+          includeLower: includeLower,
+          upper: upper,
+          includeUpper: includeUpper,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterFilterCondition> hasSubtitlesEqualTo(
+    bool value,
+  ) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.equalTo(property: r'hasSubtitles', value: value),
+      );
+    });
+  }
+
   QueryBuilder<Media, Media, QAfterFilterCondition> idEqualTo(Id value) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(
@@ -947,6 +1243,91 @@ extension MediaQueryFilter on QueryBuilder<Media, Media, QFilterCondition> {
       return query.addFilterCondition(
         FilterCondition.between(
           property: r'id',
+          lower: lower,
+          includeLower: includeLower,
+          upper: upper,
+          includeUpper: includeUpper,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterFilterCondition> isFinishedEqualTo(
+    bool value,
+  ) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.equalTo(property: r'isFinished', value: value),
+      );
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterFilterCondition> lastWatchedAtIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        const FilterCondition.isNull(property: r'lastWatchedAt'),
+      );
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterFilterCondition> lastWatchedAtIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        const FilterCondition.isNotNull(property: r'lastWatchedAt'),
+      );
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterFilterCondition> lastWatchedAtEqualTo(
+    DateTime? value,
+  ) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.equalTo(property: r'lastWatchedAt', value: value),
+      );
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterFilterCondition> lastWatchedAtGreaterThan(
+    DateTime? value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(
+          include: include,
+          property: r'lastWatchedAt',
+          value: value,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterFilterCondition> lastWatchedAtLessThan(
+    DateTime? value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.lessThan(
+          include: include,
+          property: r'lastWatchedAt',
+          value: value,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterFilterCondition> lastWatchedAtBetween(
+    DateTime? lower,
+    DateTime? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.between(
+          property: r'lastWatchedAt',
           lower: lower,
           includeLower: includeLower,
           upper: upper,
@@ -1248,6 +1629,63 @@ extension MediaQueryFilter on QueryBuilder<Media, Media, QFilterCondition> {
     });
   }
 
+  QueryBuilder<Media, Media, QAfterFilterCondition> playbackPositionMsEqualTo(
+    int value,
+  ) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.equalTo(property: r'playbackPositionMs', value: value),
+      );
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterFilterCondition>
+  playbackPositionMsGreaterThan(int value, {bool include = false}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(
+          include: include,
+          property: r'playbackPositionMs',
+          value: value,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterFilterCondition> playbackPositionMsLessThan(
+    int value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.lessThan(
+          include: include,
+          property: r'playbackPositionMs',
+          value: value,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterFilterCondition> playbackPositionMsBetween(
+    int lower,
+    int upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.between(
+          property: r'playbackPositionMs',
+          lower: lower,
+          includeLower: includeLower,
+          upper: upper,
+          includeUpper: includeUpper,
+        ),
+      );
+    });
+  }
+
   QueryBuilder<Media, Media, QAfterFilterCondition> thumbnailPathIsNull() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(
@@ -1409,6 +1847,354 @@ extension MediaQueryFilter on QueryBuilder<Media, Media, QFilterCondition> {
       );
     });
   }
+
+  QueryBuilder<Media, Media, QAfterFilterCondition> watchedFractionEqualTo(
+    double value, {
+    double epsilon = Query.epsilon,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.equalTo(
+          property: r'watchedFraction',
+          value: value,
+
+          epsilon: epsilon,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterFilterCondition> watchedFractionGreaterThan(
+    double value, {
+    bool include = false,
+    double epsilon = Query.epsilon,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(
+          include: include,
+          property: r'watchedFraction',
+          value: value,
+
+          epsilon: epsilon,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterFilterCondition> watchedFractionLessThan(
+    double value, {
+    bool include = false,
+    double epsilon = Query.epsilon,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.lessThan(
+          include: include,
+          property: r'watchedFraction',
+          value: value,
+
+          epsilon: epsilon,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterFilterCondition> watchedFractionBetween(
+    double lower,
+    double upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    double epsilon = Query.epsilon,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.between(
+          property: r'watchedFraction',
+          lower: lower,
+          includeLower: includeLower,
+          upper: upper,
+          includeUpper: includeUpper,
+
+          epsilon: epsilon,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterFilterCondition> watchedTogetherAtIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        const FilterCondition.isNull(property: r'watchedTogetherAt'),
+      );
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterFilterCondition>
+  watchedTogetherAtIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        const FilterCondition.isNotNull(property: r'watchedTogetherAt'),
+      );
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterFilterCondition> watchedTogetherAtEqualTo(
+    DateTime? value,
+  ) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.equalTo(property: r'watchedTogetherAt', value: value),
+      );
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterFilterCondition>
+  watchedTogetherAtGreaterThan(DateTime? value, {bool include = false}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(
+          include: include,
+          property: r'watchedTogetherAt',
+          value: value,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterFilterCondition> watchedTogetherAtLessThan(
+    DateTime? value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.lessThan(
+          include: include,
+          property: r'watchedTogetherAt',
+          value: value,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterFilterCondition> watchedTogetherAtBetween(
+    DateTime? lower,
+    DateTime? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.between(
+          property: r'watchedTogetherAt',
+          lower: lower,
+          includeLower: includeLower,
+          upper: upper,
+          includeUpper: includeUpper,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterFilterCondition> watchedWithElementEqualTo(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.equalTo(
+          property: r'watchedWith',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterFilterCondition>
+  watchedWithElementGreaterThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(
+          include: include,
+          property: r'watchedWith',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterFilterCondition> watchedWithElementLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.lessThan(
+          include: include,
+          property: r'watchedWith',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterFilterCondition> watchedWithElementBetween(
+    String lower,
+    String upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.between(
+          property: r'watchedWith',
+          lower: lower,
+          includeLower: includeLower,
+          upper: upper,
+          includeUpper: includeUpper,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterFilterCondition>
+  watchedWithElementStartsWith(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.startsWith(
+          property: r'watchedWith',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterFilterCondition> watchedWithElementEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.endsWith(
+          property: r'watchedWith',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterFilterCondition> watchedWithElementContains(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.contains(
+          property: r'watchedWith',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterFilterCondition> watchedWithElementMatches(
+    String pattern, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.matches(
+          property: r'watchedWith',
+          wildcard: pattern,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterFilterCondition>
+  watchedWithElementIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.equalTo(property: r'watchedWith', value: ''),
+      );
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterFilterCondition>
+  watchedWithElementIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(property: r'watchedWith', value: ''),
+      );
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterFilterCondition> watchedWithLengthEqualTo(
+    int length,
+  ) {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(r'watchedWith', length, true, length, true);
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterFilterCondition> watchedWithIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(r'watchedWith', 0, true, 0, true);
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterFilterCondition> watchedWithIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(r'watchedWith', 0, false, 999999, true);
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterFilterCondition> watchedWithLengthLessThan(
+    int length, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(r'watchedWith', 0, true, length, include);
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterFilterCondition>
+  watchedWithLengthGreaterThan(int length, {bool include = false}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(r'watchedWith', length, include, 999999, true);
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterFilterCondition> watchedWithLengthBetween(
+    int lower,
+    int upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(
+        r'watchedWith',
+        lower,
+        includeLower,
+        upper,
+        includeUpper,
+      );
+    });
+  }
 }
 
 extension MediaQueryObject on QueryBuilder<Media, Media, QFilterCondition> {}
@@ -1479,6 +2265,78 @@ extension MediaQueryLinks on QueryBuilder<Media, Media, QFilterCondition> {
 }
 
 extension MediaQuerySortBy on QueryBuilder<Media, Media, QSortBy> {
+  QueryBuilder<Media, Media, QAfterSortBy> sortByAddedAt() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'addedAt', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterSortBy> sortByAddedAtDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'addedAt', Sort.desc);
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterSortBy> sortByDominantColorValue() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'dominantColorValue', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterSortBy> sortByDominantColorValueDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'dominantColorValue', Sort.desc);
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterSortBy> sortByDurationMs() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'durationMs', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterSortBy> sortByDurationMsDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'durationMs', Sort.desc);
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterSortBy> sortByHasSubtitles() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'hasSubtitles', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterSortBy> sortByHasSubtitlesDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'hasSubtitles', Sort.desc);
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterSortBy> sortByIsFinished() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'isFinished', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterSortBy> sortByIsFinishedDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'isFinished', Sort.desc);
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterSortBy> sortByLastWatchedAt() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'lastWatchedAt', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterSortBy> sortByLastWatchedAtDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'lastWatchedAt', Sort.desc);
+    });
+  }
+
   QueryBuilder<Media, Media, QAfterSortBy> sortByName() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'name', Sort.asc);
@@ -1503,6 +2361,18 @@ extension MediaQuerySortBy on QueryBuilder<Media, Media, QSortBy> {
     });
   }
 
+  QueryBuilder<Media, Media, QAfterSortBy> sortByPlaybackPositionMs() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'playbackPositionMs', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterSortBy> sortByPlaybackPositionMsDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'playbackPositionMs', Sort.desc);
+    });
+  }
+
   QueryBuilder<Media, Media, QAfterSortBy> sortByThumbnailPath() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'thumbnailPath', Sort.asc);
@@ -1514,9 +2384,81 @@ extension MediaQuerySortBy on QueryBuilder<Media, Media, QSortBy> {
       return query.addSortBy(r'thumbnailPath', Sort.desc);
     });
   }
+
+  QueryBuilder<Media, Media, QAfterSortBy> sortByWatchedFraction() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'watchedFraction', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterSortBy> sortByWatchedFractionDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'watchedFraction', Sort.desc);
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterSortBy> sortByWatchedTogetherAt() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'watchedTogetherAt', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterSortBy> sortByWatchedTogetherAtDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'watchedTogetherAt', Sort.desc);
+    });
+  }
 }
 
 extension MediaQuerySortThenBy on QueryBuilder<Media, Media, QSortThenBy> {
+  QueryBuilder<Media, Media, QAfterSortBy> thenByAddedAt() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'addedAt', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterSortBy> thenByAddedAtDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'addedAt', Sort.desc);
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterSortBy> thenByDominantColorValue() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'dominantColorValue', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterSortBy> thenByDominantColorValueDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'dominantColorValue', Sort.desc);
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterSortBy> thenByDurationMs() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'durationMs', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterSortBy> thenByDurationMsDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'durationMs', Sort.desc);
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterSortBy> thenByHasSubtitles() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'hasSubtitles', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterSortBy> thenByHasSubtitlesDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'hasSubtitles', Sort.desc);
+    });
+  }
+
   QueryBuilder<Media, Media, QAfterSortBy> thenById() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'id', Sort.asc);
@@ -1526,6 +2468,30 @@ extension MediaQuerySortThenBy on QueryBuilder<Media, Media, QSortThenBy> {
   QueryBuilder<Media, Media, QAfterSortBy> thenByIdDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'id', Sort.desc);
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterSortBy> thenByIsFinished() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'isFinished', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterSortBy> thenByIsFinishedDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'isFinished', Sort.desc);
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterSortBy> thenByLastWatchedAt() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'lastWatchedAt', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterSortBy> thenByLastWatchedAtDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'lastWatchedAt', Sort.desc);
     });
   }
 
@@ -1553,6 +2519,18 @@ extension MediaQuerySortThenBy on QueryBuilder<Media, Media, QSortThenBy> {
     });
   }
 
+  QueryBuilder<Media, Media, QAfterSortBy> thenByPlaybackPositionMs() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'playbackPositionMs', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterSortBy> thenByPlaybackPositionMsDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'playbackPositionMs', Sort.desc);
+    });
+  }
+
   QueryBuilder<Media, Media, QAfterSortBy> thenByThumbnailPath() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'thumbnailPath', Sort.asc);
@@ -1564,9 +2542,69 @@ extension MediaQuerySortThenBy on QueryBuilder<Media, Media, QSortThenBy> {
       return query.addSortBy(r'thumbnailPath', Sort.desc);
     });
   }
+
+  QueryBuilder<Media, Media, QAfterSortBy> thenByWatchedFraction() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'watchedFraction', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterSortBy> thenByWatchedFractionDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'watchedFraction', Sort.desc);
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterSortBy> thenByWatchedTogetherAt() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'watchedTogetherAt', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Media, Media, QAfterSortBy> thenByWatchedTogetherAtDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'watchedTogetherAt', Sort.desc);
+    });
+  }
 }
 
 extension MediaQueryWhereDistinct on QueryBuilder<Media, Media, QDistinct> {
+  QueryBuilder<Media, Media, QDistinct> distinctByAddedAt() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'addedAt');
+    });
+  }
+
+  QueryBuilder<Media, Media, QDistinct> distinctByDominantColorValue() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'dominantColorValue');
+    });
+  }
+
+  QueryBuilder<Media, Media, QDistinct> distinctByDurationMs() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'durationMs');
+    });
+  }
+
+  QueryBuilder<Media, Media, QDistinct> distinctByHasSubtitles() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'hasSubtitles');
+    });
+  }
+
+  QueryBuilder<Media, Media, QDistinct> distinctByIsFinished() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'isFinished');
+    });
+  }
+
+  QueryBuilder<Media, Media, QDistinct> distinctByLastWatchedAt() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'lastWatchedAt');
+    });
+  }
+
   QueryBuilder<Media, Media, QDistinct> distinctByName({
     bool caseSensitive = true,
   }) {
@@ -1583,6 +2621,12 @@ extension MediaQueryWhereDistinct on QueryBuilder<Media, Media, QDistinct> {
     });
   }
 
+  QueryBuilder<Media, Media, QDistinct> distinctByPlaybackPositionMs() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'playbackPositionMs');
+    });
+  }
+
   QueryBuilder<Media, Media, QDistinct> distinctByThumbnailPath({
     bool caseSensitive = true,
   }) {
@@ -1593,12 +2637,66 @@ extension MediaQueryWhereDistinct on QueryBuilder<Media, Media, QDistinct> {
       );
     });
   }
+
+  QueryBuilder<Media, Media, QDistinct> distinctByWatchedFraction() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'watchedFraction');
+    });
+  }
+
+  QueryBuilder<Media, Media, QDistinct> distinctByWatchedTogetherAt() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'watchedTogetherAt');
+    });
+  }
+
+  QueryBuilder<Media, Media, QDistinct> distinctByWatchedWith() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'watchedWith');
+    });
+  }
 }
 
 extension MediaQueryProperty on QueryBuilder<Media, Media, QQueryProperty> {
   QueryBuilder<Media, int, QQueryOperations> idProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'id');
+    });
+  }
+
+  QueryBuilder<Media, DateTime?, QQueryOperations> addedAtProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'addedAt');
+    });
+  }
+
+  QueryBuilder<Media, int, QQueryOperations> dominantColorValueProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'dominantColorValue');
+    });
+  }
+
+  QueryBuilder<Media, int, QQueryOperations> durationMsProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'durationMs');
+    });
+  }
+
+  QueryBuilder<Media, bool, QQueryOperations> hasSubtitlesProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'hasSubtitles');
+    });
+  }
+
+  QueryBuilder<Media, bool, QQueryOperations> isFinishedProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'isFinished');
+    });
+  }
+
+  QueryBuilder<Media, DateTime?, QQueryOperations> lastWatchedAtProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'lastWatchedAt');
     });
   }
 
@@ -1614,9 +2712,33 @@ extension MediaQueryProperty on QueryBuilder<Media, Media, QQueryProperty> {
     });
   }
 
+  QueryBuilder<Media, int, QQueryOperations> playbackPositionMsProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'playbackPositionMs');
+    });
+  }
+
   QueryBuilder<Media, String?, QQueryOperations> thumbnailPathProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'thumbnailPath');
+    });
+  }
+
+  QueryBuilder<Media, double, QQueryOperations> watchedFractionProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'watchedFraction');
+    });
+  }
+
+  QueryBuilder<Media, DateTime?, QQueryOperations> watchedTogetherAtProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'watchedTogetherAt');
+    });
+  }
+
+  QueryBuilder<Media, List<String>, QQueryOperations> watchedWithProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'watchedWith');
     });
   }
 }

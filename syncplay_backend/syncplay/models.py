@@ -4,10 +4,17 @@ import uuid
 
 class Room(models.Model):
     """Model representing a SyncPlay room"""
-    ROOM_MODES = [('friends', 'Friends'), ('couple', 'Couple')]
+    ROOM_MODES = [
+        ('friends', 'Friends'),
+        ('couple', 'Couple'),
+        ('party', 'Party'),
+        ('horror', 'Horror'),
+        ('roast', 'Roast'),
+        ('movieClub', 'Movie Club'),
+    ]
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=100)
-    room_mode = models.CharField(max_length=12, choices=ROOM_MODES, default='friends')
+    room_mode = models.CharField(max_length=16, choices=ROOM_MODES, default='friends')
     host_id = models.UUIDField()
     current_video_url = models.URLField(blank=True, null=True)
     current_video_title = models.CharField(max_length=255, blank=True, null=True)

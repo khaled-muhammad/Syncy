@@ -31,7 +31,8 @@ class CreateRoomSerializer(serializers.Serializer):
     room_name = serializers.CharField(max_length=100)
     user_name = serializers.CharField(max_length=50)
     room_mode = serializers.ChoiceField(
-        choices=['friends', 'couple'], default='friends'
+        choices=['friends', 'couple', 'party', 'horror', 'roast', 'movieClub'],
+        default='friends',
     )
     
     def validate_room_name(self, value):

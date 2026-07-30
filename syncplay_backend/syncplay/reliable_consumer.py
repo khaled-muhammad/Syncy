@@ -56,6 +56,8 @@ class ReliableSyncPlayConsumer(AsyncWebsocketConsumer):
                 'chat': self.handle_chat,
                 'reaction': self.handle_reaction,
                 'typing': self.handle_typing,
+                'countdown': self.handle_countdown,
+                'rating': self.handle_rating,
                 'leave': self.send_ack,
             }
             handler = handlers.get(kind)
@@ -171,6 +173,7 @@ class ReliableSyncPlayConsumer(AsyncWebsocketConsumer):
                 'emoji': emoji,
                 'user_id': self.user_id,
                 'user_name': self.user.name,
+                'position_ms': (data.get('data') or {}).get('positionMs'),
                 'timestamp': timezone.now().isoformat(),
             },
         )
@@ -190,6 +193,41 @@ class ReliableSyncPlayConsumer(AsyncWebsocketConsumer):
                 'user_id': self.user_id,
                 'user_name': self.user.name,
                 'timestamp': timezone.now().isoformat(),
+            },
+        )
+        await self.send_ack(data)
+
+    async def handle_countdown(self, data):
+        if not self.user.is_host:
+            await self.send_error('Only the host can start the countdown')
+            return
+        seconds = int((data.get('data') or {}).get('seconds') or 3)
+        seconds = max(2, min(seconds, 10))
+        ends_at = timezone.now() + timedelta(seconds=seconds)
+        await self.channel_layer.group_send(
+            self.room_group_name,
+            {
+                'type': 'countdown_event',
+                'event_id': str(self.parse_event_id(data) or uuid.uuid4()),
+                'seconds': seconds,
+                'ends_at': ends_at.isoformat(),
+                'user_id': self.user_id,
+            },
+        )
+        await self.send_ack(data)
+
+    async def handle_rating(self, data):
+        raw_rating = int((data.get('data') or {}).get('rating') or 0)
+        if raw_rating < 1 or raw_rating > 5:
+            raise ValueError('Rating must be between 1 and 5')
+        await self.channel_layer.group_send(
+            self.room_group_name,
+            {
+                'type': 'rating_event',
+                'event_id': str(self.parse_event_id(data) or uuid.uuid4()),
+                'rating': raw_rating,
+                'user_id': self.user_id,
+                'user_name': self.user.name,
             },
         )
         await self.send_ack(data)
@@ -284,6 +322,7 @@ class ReliableSyncPlayConsumer(AsyncWebsocketConsumer):
                     'emoji': event['emoji'],
                     'userId': event['user_id'],
                     'userName': event['user_name'],
+                    'positionMs': event.get('position_ms'),
                     'timestamp': event['timestamp'],
                 },
             }
@@ -299,6 +338,32 @@ class ReliableSyncPlayConsumer(AsyncWebsocketConsumer):
                     'userId': event['user_id'],
                     'userName': event['user_name'],
                     'timestamp': event['timestamp'],
+                },
+            }
+        )
+
+    async def countdown_event(self, event):
+        await self.send_json(
+            {
+                'type': 'countdown',
+                'eventId': event['event_id'],
+                'data': {
+                    'seconds': event['seconds'],
+                    'endsAt': event['ends_at'],
+                    'userId': event['user_id'],
+                },
+            }
+        )
+
+    async def rating_event(self, event):
+        await self.send_json(
+            {
+                'type': 'rating',
+                'eventId': event['event_id'],
+                'data': {
+                    'rating': event['rating'],
+                    'userId': event['user_id'],
+                    'userName': event['user_name'],
                 },
             }
         )

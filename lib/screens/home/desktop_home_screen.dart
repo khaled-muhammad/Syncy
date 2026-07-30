@@ -7,6 +7,7 @@ import 'package:syncy/bottomsheets/create_room_bottom_sheet.dart';
 import 'package:syncy/bottomsheets/join_room_bottom_sheet.dart';
 import 'package:syncy/controllers/library_controller.dart';
 import 'package:syncy/models/media.dart';
+import 'package:syncy/models/media_shelf.dart';
 import 'package:syncy/routes/app_routes.dart';
 import 'package:syncy/screens/lan/pc_pairing_screen.dart';
 import 'package:syncy/screens/search/seach_screen.dart';
@@ -26,15 +27,18 @@ class DesktopHomeScreen extends GetView<LibraryController> {
 
   @override
   Widget build(BuildContext context) {
-    return NativePurpleMeshBackground(
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
-        body: SafeArea(
-          child: Row(
-            children: [
-              _LibrarySidebar(controller: controller),
-              Expanded(child: _LibraryContent(controller: controller)),
-            ],
+    return Obx(
+      () => NativePurpleMeshBackground(
+        accent: Color(controller.selectedAccentValue.value),
+        child: Scaffold(
+          backgroundColor: Colors.transparent,
+          body: SafeArea(
+            child: Row(
+              children: [
+                _LibrarySidebar(controller: controller),
+                Expanded(child: _LibraryContent(controller: controller)),
+              ],
+            ),
           ),
         ),
       ),
@@ -402,7 +406,16 @@ class _LibraryContent extends StatelessWidget {
                 isScanning: controller.isScanning.value,
               );
             }
-            return _MediaGrid(media: controller.visibleMedia);
+            if (controller.selectedSubPath.value == null) {
+              return _DesktopMediaOverview(
+                media: controller.visibleMedia,
+                onFocused: controller.selectMediaAccent,
+              );
+            }
+            return _MediaGrid(
+              media: controller.visibleMedia,
+              onFocused: controller.selectMediaAccent,
+            );
           }),
         ),
       ],
@@ -501,9 +514,10 @@ class _ContentHeader extends StatelessWidget {
 }
 
 class _MediaGrid extends StatelessWidget {
-  const _MediaGrid({required this.media});
+  const _MediaGrid({required this.media, required this.onFocused});
 
   final List<Media> media;
+  final ValueChanged<Media> onFocused;
 
   @override
   Widget build(BuildContext context) {
@@ -523,10 +537,133 @@ class _MediaGrid extends StatelessWidget {
         return MediaCard(
           mediaElement: item,
           isAudio: false,
+          onFocused: onFocused,
           onPressed: () =>
               showAdaptiveSheet(CreateRoomBottomSheet(media: item)),
         );
       },
+    );
+  }
+}
+
+class _DesktopMediaOverview extends StatelessWidget {
+  const _DesktopMediaOverview({required this.media, required this.onFocused});
+
+  final List<Media> media;
+  final ValueChanged<Media> onFocused;
+
+  @override
+  Widget build(BuildContext context) {
+    final shelves = buildMediaShelves(media);
+    return CustomScrollView(
+      slivers: [
+        for (final shelf in shelves)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 24),
+              child: _DesktopShelf(shelf: shelf, onFocused: onFocused),
+            ),
+          ),
+        const SliverToBoxAdapter(
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(28, 0, 28, 12),
+            child: Text(
+              'All videos',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+            ),
+          ),
+        ),
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(28, 0, 28, 28),
+          sliver: SliverGrid(
+            delegate: SliverChildBuilderDelegate(
+              (context, index) => MediaCard(
+                mediaElement: media[index],
+                onFocused: onFocused,
+                onPressed: () => showAdaptiveSheet(
+                  CreateRoomBottomSheet(media: media[index]),
+                ),
+              ),
+              childCount: media.length,
+            ),
+            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+              maxCrossAxisExtent: 260,
+              crossAxisSpacing: 20,
+              mainAxisSpacing: 24,
+              childAspectRatio: 3 / 4,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _DesktopShelf extends StatelessWidget {
+  const _DesktopShelf({required this.shelf, required this.onFocused});
+
+  final MediaShelf shelf;
+  final ValueChanged<Media> onFocused;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(28, 4, 28, 10),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      shelf.title,
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      shelf.subtitle,
+                      style: const TextStyle(
+                        color: Colors.white54,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Text(
+                '${shelf.items.length}',
+                style: const TextStyle(color: Colors.white38),
+              ),
+            ],
+          ),
+        ),
+        SizedBox(
+          height: 242,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 28),
+            itemCount: shelf.items.length,
+            separatorBuilder: (_, _) => const SizedBox(width: 16),
+            itemBuilder: (context, index) => SizedBox(
+              width: 166,
+              child: MediaCard(
+                mediaElement: shelf.items[index],
+                compact: true,
+                onFocused: onFocused,
+                onPressed: () => showAdaptiveSheet(
+                  CreateRoomBottomSheet(media: shelf.items[index]),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

@@ -1,12 +1,15 @@
+import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:isar_community/isar.dart';
+import 'package:flutter_video_info/flutter_video_info.dart';
 import 'package:syncy/models/media.dart';
 import 'package:syncy/services/media_discovery_service.dart';
 import 'package:syncy/services/thumbnail_service.dart';
 import 'package:syncy/utils/files.dart';
+import 'package:syncy/utils/platform_utils.dart';
 import 'package:syncy/utils/storage_helper.dart';
 
 class HomeController extends GetxController with WidgetsBindingObserver {
@@ -17,6 +20,7 @@ class HomeController extends GetxController with WidgetsBindingObserver {
   final newMediaCount = 0.obs;
   final currentDirectory = ''.obs;
   final hasPermission = false.obs;
+  final selectedAccentValue = const Color(0xFF7137E8).toARGB32().obs;
   final isar = Get.find<Isar>();
   final thumbnailService = Get.find<ThumbnailService>();
   final MediaDiscoveryService _mediaDiscovery = MediaDiscoveryService();
@@ -36,7 +40,24 @@ class HomeController extends GetxController with WidgetsBindingObserver {
 
   void _loadCachedMedia() {
     media.value = isar.medias.where().findAllSync();
+    final unstamped = media.where((item) => item.addedAt == null).toList();
+    if (unstamped.isNotEmpty) {
+      final now = DateTime.now();
+      isar.writeTxnSync(() {
+        for (final item in unstamped) {
+          item.addedAt = now;
+        }
+        isar.medias.putAllSync(unstamped);
+      });
+    }
     isLoading.value = media.isEmpty;
+  }
+
+  void selectMediaAccent(Media item) {
+    final value = item.dominantColorValue;
+    selectedAccentValue.value = value == 0
+        ? const Color(0xFF7137E8).toARGB32()
+        : value;
   }
 
   void _setupThumbnailCallbacks() {
@@ -115,7 +136,9 @@ class HomeController extends GetxController with WidgetsBindingObserver {
               return Media()
                 ..path = path
                 ..name = _fileName(path)
-                ..thumbnailPath = '';
+                ..thumbnailPath = ''
+                ..addedAt = DateTime.now()
+                ..hasSubtitles = _hasSiblingSubtitle(path);
             })
             .toList(growable: false);
 
@@ -130,6 +153,7 @@ class HomeController extends GetxController with WidgetsBindingObserver {
       }
 
       await thumbnailService.generateMissingThumbnails();
+      if (!isDesktop) unawaited(_enrichVideoMetadata());
       syncStatusMessage.value = newVideoPaths.isEmpty
           ? 'Media is up to date'
           : newVideoPaths.length == 1
@@ -161,6 +185,13 @@ class HomeController extends GetxController with WidgetsBindingObserver {
     return path.replaceAll('\\', '/').split('/').last;
   }
 
+  bool _hasSiblingSubtitle(String videoPath) {
+    final separator = videoPath.lastIndexOf(RegExp(r'[/\\]'));
+    final dot = videoPath.lastIndexOf('.');
+    final base = dot > separator ? videoPath.substring(0, dot) : videoPath;
+    return File('$base.srt').existsSync() || File('$base.vtt').existsSync();
+  }
+
   Future<void> refreshMediaFiles() async {
     await loadMediaFiles();
   }
@@ -174,6 +205,29 @@ class HomeController extends GetxController with WidgetsBindingObserver {
 
   Future<void> generateThumbnails() async {
     await thumbnailService.generateMissingThumbnails();
+  }
+
+  Future<void> _enrichVideoMetadata() async {
+    final pending = media.where((item) => item.durationMs <= 0).take(30);
+    final info = FlutterVideoInfo();
+    for (final item in pending) {
+      try {
+        final metadata = await info.getVideoInfo(item.path);
+        final duration = metadata?.duration?.round() ?? 0;
+        if (duration <= 0) continue;
+        item.durationMs = duration;
+        isar.writeTxnSync(() => isar.medias.putSync(item));
+        final index = media.indexWhere(
+          (candidate) => candidate.path == item.path,
+        );
+        if (index != -1) {
+          media[index] = item;
+          media.refresh();
+        }
+      } catch (_) {
+        // Some Android providers do not expose metadata; playback will fill it.
+      }
+    }
   }
 
   Map<String, int> getThumbnailStats() {

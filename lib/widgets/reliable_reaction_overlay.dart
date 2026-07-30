@@ -3,7 +3,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:syncy/controllers/room_controller.dart';
-import 'package:syncy/models/room.dart';
+import 'package:syncy/models/room_preset.dart';
 
 class ReactionOverlay extends StatelessWidget {
   const ReactionOverlay({super.key, this.bottomInset = 72, this.controller});
@@ -26,6 +26,7 @@ class ReactionOverlay extends StatelessWidget {
                     emoji: reaction['emoji'] ?? '❤️',
                     availableWidth: constraints.maxWidth,
                     bottomInset: bottomInset,
+                    motion: roomController.room.value.mode.preset.motion,
                   ),
                 )
                 .toList(),
@@ -42,11 +43,13 @@ class _FloatingReaction extends StatefulWidget {
     required this.emoji,
     required this.availableWidth,
     required this.bottomInset,
+    required this.motion,
   });
 
   final String emoji;
   final double availableWidth;
   final double bottomInset;
+  final ReactionMotion motion;
 
   @override
   State<_FloatingReaction> createState() => _FloatingReactionState();
@@ -57,20 +60,32 @@ class _FloatingReactionState extends State<_FloatingReaction>
   late final double _horizontalOffset = Random().nextDouble() * .68 + .16;
   late final AnimationController _animation = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 2400),
+    duration: Duration(
+      milliseconds: widget.motion == ReactionMotion.burst ? 1500 : 2400,
+    ),
   )..forward();
   late final Animation<double> _fade = CurvedAnimation(
     parent: _animation,
     curve: const Interval(.62, 1, curve: Curves.easeOut),
   ).drive(Tween(begin: 1, end: 0));
-  late final Animation<double> _rise = CurvedAnimation(
-    parent: _animation,
-    curve: Curves.easeOutCubic,
-  ).drive(Tween(begin: 0, end: 210));
-  late final Animation<double> _scale = CurvedAnimation(
-    parent: _animation,
-    curve: Curves.elasticOut,
-  ).drive(Tween(begin: .35, end: 1));
+  late final Animation<double> _rise =
+      CurvedAnimation(parent: _animation, curve: Curves.easeOutCubic).drive(
+        Tween(
+          begin: 0,
+          end: widget.motion == ReactionMotion.bounce
+              ? 120
+              : widget.motion == ReactionMotion.spotlight
+              ? 165
+              : 210,
+        ),
+      );
+  late final Animation<double> _scale =
+      CurvedAnimation(parent: _animation, curve: Curves.elasticOut).drive(
+        Tween(
+          begin: widget.motion == ReactionMotion.burst ? .05 : .35,
+          end: widget.motion == ReactionMotion.burst ? 1.35 : 1,
+        ),
+      );
 
   @override
   void dispose() {
@@ -112,23 +127,19 @@ class ReactionBar extends StatelessWidget {
   final VoidCallback? onReactionSent;
   final RoomController? controller;
 
-  static const friendsReactions = ['😂', '🔥', '😮', '👏', '👍', '🎉'];
-  static const coupleReactions = ['❤️', '😘', '🥰', '💋', '🌹', '🫶'];
-
   @override
   Widget build(BuildContext context) {
     final roomController = controller ?? Get.find<RoomController>();
     return Obx(() {
-      final reactions = roomController.room.value.mode == RoomMode.couple
-          ? coupleReactions
-          : friendsReactions;
+      final preset = roomController.room.value.mode.preset;
+      final reactions = preset.reactions;
       return Container(
         constraints: const BoxConstraints(maxWidth: 340),
         padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
         decoration: BoxDecoration(
           color: const Color(0xFF120C20).withValues(alpha: .88),
           borderRadius: BorderRadius.circular(28),
-          border: Border.all(color: Colors.white.withValues(alpha: .12)),
+          border: Border.all(color: preset.accent.withValues(alpha: .3)),
           boxShadow: const [
             BoxShadow(
               color: Colors.black38,

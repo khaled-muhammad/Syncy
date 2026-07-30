@@ -349,8 +349,9 @@ class ReliableWebSocketService extends GetxService {
     String roomId,
     String userId,
     String userName,
-    String emoji,
-  ) async {
+    String emoji, {
+    int? positionMs,
+  }) async {
     if (!isJoined.value) return;
     _sendNow(
       Message.reaction(
@@ -358,6 +359,7 @@ class ReliableWebSocketService extends GetxService {
         userId: userId,
         userName: userName,
         emoji: emoji,
+        positionMs: positionMs,
       ),
     );
   }
@@ -379,6 +381,22 @@ class ReliableWebSocketService extends GetxService {
         isTyping: isTyping,
       ),
     );
+  }
+
+  Future<void> sendCountdown(
+    String roomId,
+    String userId, {
+    int seconds = 3,
+  }) async {
+    if (!isJoined.value) return;
+    _sendNow(
+      Message.countdown(roomId: roomId, userId: userId, seconds: seconds),
+    );
+  }
+
+  Future<void> sendRating(String roomId, String userId, int rating) async {
+    if (!isJoined.value) return;
+    _sendNow(Message.rating(roomId: roomId, userId: userId, rating: rating));
   }
 
   Future<void> leaveRoom(String roomId, String userId) async {

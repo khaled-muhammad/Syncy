@@ -1,7 +1,7 @@
 import uuid
 
 from asgiref.sync import async_to_sync
-from channels.testing import WebsocketCommunicator
+from channels.testing.websocket import WebsocketCommunicator
 from django.test import TransactionTestCase, override_settings
 
 from syncplay_backend.asgi import application
@@ -125,6 +125,49 @@ class ReliableWebSocketTests(TransactionTestCase):
         self.assertFalse(
             Message.objects.filter(message_type__in=['typing', 'reaction']).exists()
         )
+
+    def test_countdown_and_rating_are_broadcast_as_ephemeral_room_events(self):
+        async_to_sync(self._countdown_and_rating_scenario)()
+        self.assertFalse(
+            Message.objects.filter(message_type__in=['countdown', 'rating']).exists()
+        )
+
+    async def _countdown_and_rating_scenario(self):
+        socket = WebsocketCommunicator(
+            application, f'/ws/room/{self.room.id}/'
+        )
+        await socket.connect()
+        await socket.send_json_to(self.join_envelope())
+        await self.receive_types(socket, {'user_joined', 'room_update', 'ack'})
+
+        countdown_id = str(uuid.uuid4())
+        await socket.send_json_to(
+            {
+                'type': 'countdown',
+                'userId': str(self.user_id),
+                'eventId': countdown_id,
+                'data': {'seconds': 3},
+            }
+        )
+        events = await self.receive_types(socket, {'countdown', 'ack'})
+        self.assertEqual(events['countdown']['eventId'], countdown_id)
+        self.assertEqual(events['countdown']['data']['seconds'], 3)
+        self.assertIn('endsAt', events['countdown']['data'])
+
+        rating_id = str(uuid.uuid4())
+        await socket.send_json_to(
+            {
+                'type': 'rating',
+                'userId': str(self.user_id),
+                'eventId': rating_id,
+                'data': {'rating': 5},
+            }
+        )
+        events = await self.receive_types(socket, {'rating', 'ack'})
+        self.assertEqual(events['rating']['eventId'], rating_id)
+        self.assertEqual(events['rating']['data']['rating'], 5)
+        self.assertEqual(events['rating']['data']['userName'], 'Alice')
+        await socket.disconnect()
 
     async def _ephemeral_events_scenario(self):
         socket = WebsocketCommunicator(

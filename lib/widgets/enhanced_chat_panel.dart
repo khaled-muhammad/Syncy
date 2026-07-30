@@ -3,7 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:syncy/controllers/room_controller.dart';
-import 'package:syncy/models/room.dart';
+import 'package:syncy/models/room_preset.dart';
 
 class ChatPanel extends StatefulWidget {
   const ChatPanel({super.key});
@@ -58,10 +58,8 @@ class _ChatPanelState extends State<ChatPanel> {
 
   @override
   Widget build(BuildContext context) {
-    final coupleMode = controller.room.value.mode == RoomMode.couple;
-    final accent = coupleMode
-        ? const Color(0xFFFF6FAE)
-        : const Color(0xFF9A72FF);
+    final preset = controller.room.value.mode.preset;
+    final accent = preset.accent;
     return DecoratedBox(
       decoration: BoxDecoration(
         color: const Color(0xFF100B19).withValues(alpha: .9),
@@ -88,13 +86,7 @@ class _ChatPanelState extends State<ChatPanel> {
                     color: accent.withValues(alpha: .16),
                     borderRadius: BorderRadius.circular(11),
                   ),
-                  child: Icon(
-                    coupleMode
-                        ? Icons.favorite_outline_rounded
-                        : Icons.forum_outlined,
-                    color: accent,
-                    size: 19,
-                  ),
+                  child: Icon(preset.icon, color: accent, size: 19),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
@@ -102,7 +94,7 @@ class _ChatPanelState extends State<ChatPanel> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        coupleMode ? 'Our chat' : 'Room chat',
+                        preset.chatTitle,
                         style: const TextStyle(
                           fontWeight: FontWeight.w700,
                           fontSize: 15,
@@ -136,7 +128,11 @@ class _ChatPanelState extends State<ChatPanel> {
                 (_) => _scrollToLatest(),
               );
               if (messages.isEmpty && typingNames.isEmpty) {
-                return _EmptyChat(coupleMode: coupleMode, accent: accent);
+                return _EmptyChat(
+                  title: preset.emptyChatTitle,
+                  icon: preset.icon,
+                  accent: accent,
+                );
               }
               return ListView.builder(
                 controller: _scroll,
@@ -192,9 +188,7 @@ class _ChatPanelState extends State<ChatPanel> {
                     },
                     decoration: InputDecoration(
                       counterText: '',
-                      hintText: coupleMode
-                          ? 'Say something sweet…'
-                          : 'Message everyone…',
+                      hintText: preset.chatHint,
                       filled: true,
                       fillColor: Colors.white.withValues(alpha: .07),
                       contentPadding: const EdgeInsets.symmetric(
@@ -242,9 +236,14 @@ class _ChatPanelState extends State<ChatPanel> {
 }
 
 class _EmptyChat extends StatelessWidget {
-  const _EmptyChat({required this.coupleMode, required this.accent});
+  const _EmptyChat({
+    required this.title,
+    required this.icon,
+    required this.accent,
+  });
 
-  final bool coupleMode;
+  final String title;
+  final IconData icon;
   final Color accent;
 
   @override
@@ -255,16 +254,9 @@ class _EmptyChat extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              coupleMode ? Icons.favorite_rounded : Icons.waving_hand_rounded,
-              color: accent.withValues(alpha: .8),
-              size: 30,
-            ),
+            Icon(icon, color: accent.withValues(alpha: .8), size: 30),
             const SizedBox(height: 10),
-            Text(
-              coupleMode ? 'Start your private moment' : 'Break the silence',
-              style: const TextStyle(fontWeight: FontWeight.w700),
-            ),
+            Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
             const SizedBox(height: 4),
             const Text(
               'New messages and recent history stay synced.',

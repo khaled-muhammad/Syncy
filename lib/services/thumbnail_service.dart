@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:ui' as ui;
 import 'package:get/get.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:isar_community/isar.dart';
@@ -53,6 +54,7 @@ class ThumbnailService extends GetxService {
   mk.Player? _thumbnailPlayer;
   // ignore: unused_field
   VideoController? _thumbnailController;
+  final Map<String, int> _discoveredDurations = {};
 
   List<ThumbnailRequest> get requestQueue => _requestQueue.toList();
   bool get isProcessing => _isProcessing.value;
@@ -266,10 +268,8 @@ class ThumbnailService extends GetxService {
     try {
       // get_thumbnail_video has no desktop implementation, so desktop grabs a
       // frame through media_kit — the same engine that plays the file.
-      if (isDesktop) return await _generateThumbnailWithMediaKit(
-        videoPath,
-        outputPath,
-      );
+      if (isDesktop)
+        return await _generateThumbnailWithMediaKit(videoPath, outputPath);
 
       final result = await VideoThumbnail.thumbnailFile(
         video: videoPath,
@@ -310,6 +310,9 @@ class ThumbnailService extends GetxService {
         const Duration(seconds: 20),
         onTimeout: () => Duration.zero,
       );
+      if (duration > Duration.zero) {
+        _discoveredDurations[videoPath] = duration.inMilliseconds;
+      }
       // Give the decoded frame a moment to present on the shared texture.
       await Future<void>.delayed(const Duration(milliseconds: 400));
 
@@ -348,8 +351,7 @@ class ThumbnailService extends GetxService {
     return player;
   }
 
-  String _fileNameOf(String path) =>
-      path.replaceAll('\\', '/').split('/').last;
+  String _fileNameOf(String path) => path.replaceAll('\\', '/').split('/').last;
 
   Future<void> _updateMediaWithThumbnail(
     String videoPath,
@@ -363,6 +365,12 @@ class ThumbnailService extends GetxService {
 
       if (existingMedia != null) {
         existingMedia.thumbnailPath = thumbnailPath;
+        existingMedia.addedAt ??= DateTime.now();
+        existingMedia.durationMs =
+            _discoveredDurations.remove(videoPath) ?? existingMedia.durationMs;
+        existingMedia.dominantColorValue = await _extractDominantColor(
+          thumbnailPath,
+        );
         _isar.writeTxnSync(() {
           _isar.medias.putSync(existingMedia);
         });
@@ -372,7 +380,10 @@ class ThumbnailService extends GetxService {
         final newMedia = Media()
           ..path = videoPath
           ..name = fileName
-          ..thumbnailPath = thumbnailPath;
+          ..thumbnailPath = thumbnailPath
+          ..addedAt = DateTime.now()
+          ..durationMs = _discoveredDurations.remove(videoPath) ?? 0
+          ..dominantColorValue = await _extractDominantColor(thumbnailPath);
         _isar.writeTxnSync(() {
           _isar.medias.putSync(newMedia);
         });
@@ -381,6 +392,58 @@ class ThumbnailService extends GetxService {
     } catch (e) {
       print('Error updating media with thumbnail: $e');
       rethrow;
+    }
+  }
+
+  Future<int> _extractDominantColor(String thumbnailPath) async {
+    ui.Codec? codec;
+    try {
+      final bytes = await File(thumbnailPath).readAsBytes();
+      codec = await ui.instantiateImageCodec(
+        bytes,
+        targetWidth: 32,
+        targetHeight: 32,
+      );
+      final frame = await codec.getNextFrame();
+      final data = await frame.image.toByteData(
+        format: ui.ImageByteFormat.rawRgba,
+      );
+      frame.image.dispose();
+      if (data == null) return 0;
+
+      var red = 0.0;
+      var green = 0.0;
+      var blue = 0.0;
+      var weightTotal = 0.0;
+      final pixels = data.buffer.asUint8List();
+      for (var offset = 0; offset + 3 < pixels.length; offset += 4) {
+        final r = pixels[offset].toDouble();
+        final g = pixels[offset + 1].toDouble();
+        final b = pixels[offset + 2].toDouble();
+        final brightest = [r, g, b].reduce((a, b) => a > b ? a : b);
+        final darkest = [r, g, b].reduce((a, b) => a < b ? a : b);
+        final brightness = (r + g + b) / 3;
+        if (brightness < 18 || brightness > 242) continue;
+        final saturation = (brightest - darkest) / 255;
+        final weight = .35 + saturation * 1.65;
+        red += r * weight;
+        green += g * weight;
+        blue += b * weight;
+        weightTotal += weight;
+      }
+      if (weightTotal == 0) return 0;
+
+      final r = (red / weightTotal).round();
+      final g = (green / weightTotal).round();
+      final b = (blue / weightTotal).round();
+      final average = (r + g + b) / 3;
+      int punch(int value) =>
+          (average + (value - average) * 1.35).round().clamp(22, 232);
+      return ui.Color.fromARGB(255, punch(r), punch(g), punch(b)).toARGB32();
+    } catch (_) {
+      return 0;
+    } finally {
+      codec?.dispose();
     }
   }
 

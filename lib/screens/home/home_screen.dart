@@ -5,6 +5,8 @@ import 'package:icons_plus/icons_plus.dart';
 import 'package:syncy/bottomsheets/create_room_bottom_sheet.dart';
 import 'package:syncy/bottomsheets/join_room_bottom_sheet.dart';
 import 'package:syncy/controllers/home_controller.dart';
+import 'package:syncy/models/media.dart';
+import 'package:syncy/models/media_shelf.dart';
 import 'package:syncy/screens/home/desktop_home_screen.dart';
 import 'package:syncy/screens/lan/connect_pc_screen.dart';
 import 'package:syncy/screens/search/seach_screen.dart';
@@ -37,121 +39,126 @@ class _MobileHomeScreen extends GetView<HomeController> {
       initialPage: controller.activeIndex.value,
     );
 
-    return NativePurpleMeshBackground(
-      child: Stack(
-        children: [
-          Scaffold(
-            backgroundColor: Colors.transparent,
-            body: Stack(
-              children: [
-                Obx(
-                  () => PageView(
-                    controller: pageController,
-                    onPageChanged: (index) =>
-                        controller.activeIndex.value = index,
-                    children: [_buildAudioPage(), _buildVideoPage()],
+    return Obx(
+      () => NativePurpleMeshBackground(
+        accent: Color(controller.selectedAccentValue.value),
+        child: Stack(
+          children: [
+            Scaffold(
+              backgroundColor: Colors.transparent,
+              body: Stack(
+                children: [
+                  Obx(
+                    () => PageView(
+                      controller: pageController,
+                      onPageChanged: (index) =>
+                          controller.activeIndex.value = index,
+                      children: [_buildAudioPage(), _buildVideoPage()],
+                    ),
                   ),
-                ),
-                Obx(
-                  () =>
-                      controller.isSyncing.value && controller.media.isNotEmpty
-                      ? Positioned(
-                          top: 0,
-                          left: 0,
-                          right: 0,
-                          child: SafeArea(
-                            child: _MediaRefreshBanner(
-                              message: controller.syncStatusMessage.value,
-                            ),
-                          ),
-                        )
-                      : const SizedBox.shrink(),
-                ),
-                Align(
-                  alignment: Alignment.bottomCenter,
-                  child: SafeArea(
-                    child: Padding(
-                      padding: const EdgeInsets.only(bottom: 32),
-                      child: Obx(
-                        () => FloatingBottomBar(
-                          activeIndex: controller.activeIndex.value,
-                          navItems: [
-                            NavItem(
-                              icon: IonIcons.disc,
-                              label: "Audio",
-                              onPressed: () {
-                                controller.activeIndex.value = 0;
-                                pageController.jumpToPage(0);
-                              },
-                            ),
-                            NavItem(
-                              icon: IonIcons.home,
-                              label: "Home",
-                              onPressed: () {
-                                controller.activeIndex.value = 1;
-                                pageController.jumpToPage(1);
-                              },
-                            ),
-                            NavItem(
-                              icon: IonIcons.log_in,
-                              label: "Join",
-                              onPressed: () {
-                                controller.activeIndex.value = 1;
-                                showAdaptiveSheet(const JoinRoomBottomSheet());
-                              },
-                            ),
-                            NavItem(
-                              icon: IonIcons.desktop,
-                              label: "PC",
-                              onPressed: () => Get.to(
-                                () => const ConnectPcScreen(),
+                  Obx(
+                    () =>
+                        controller.isSyncing.value &&
+                            controller.media.isNotEmpty
+                        ? Positioned(
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            child: SafeArea(
+                              child: _MediaRefreshBanner(
+                                message: controller.syncStatusMessage.value,
                               ),
                             ),
-                          ],
+                          )
+                        : const SizedBox.shrink(),
+                  ),
+                  Align(
+                    alignment: Alignment.bottomCenter,
+                    child: SafeArea(
+                      child: Padding(
+                        padding: const EdgeInsets.only(bottom: 32),
+                        child: Obx(
+                          () => FloatingBottomBar(
+                            activeIndex: controller.activeIndex.value,
+                            navItems: [
+                              NavItem(
+                                icon: IonIcons.disc,
+                                label: "Audio",
+                                onPressed: () {
+                                  controller.activeIndex.value = 0;
+                                  pageController.jumpToPage(0);
+                                },
+                              ),
+                              NavItem(
+                                icon: IonIcons.home,
+                                label: "Home",
+                                onPressed: () {
+                                  controller.activeIndex.value = 1;
+                                  pageController.jumpToPage(1);
+                                },
+                              ),
+                              NavItem(
+                                icon: IonIcons.log_in,
+                                label: "Join",
+                                onPressed: () {
+                                  controller.activeIndex.value = 1;
+                                  showAdaptiveSheet(
+                                    const JoinRoomBottomSheet(),
+                                  );
+                                },
+                              ),
+                              NavItem(
+                                icon: IonIcons.desktop,
+                                label: "PC",
+                                onPressed: () =>
+                                    Get.to(() => const ConnectPcScreen()),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
-                Positioned(
-                  right: 20,
-                  top: 36,
-                  child: Hero(
-                    tag: 'search-btn',
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(100),
-                      child: BackdropFilter(
-                        filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-                        child: Container(
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: Colors.white24,
-                          ),
-                          child: IconButton(
-                            style: IconButton.styleFrom(
-                              foregroundColor: Colors.white,
-                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                              fixedSize: const Size(52, 52),
+                  Positioned(
+                    right: 20,
+                    top: 36,
+                    child: Hero(
+                      tag: 'search-btn',
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(100),
+                        child: BackdropFilter(
+                          filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Colors.white24,
                             ),
-                            onPressed: () {
-                              Get.to(
-                                () => SearchScreen(media: controller.media),
-                                opaque: false,
-                                fullscreenDialog: true,
-                                transition: Transition.fadeIn,
-                              );
-                            },
-                            icon: const Icon(Icons.search_rounded),
+                            child: IconButton(
+                              style: IconButton.styleFrom(
+                                foregroundColor: Colors.white,
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                fixedSize: const Size(52, 52),
+                              ),
+                              onPressed: () {
+                                Get.to(
+                                  () => SearchScreen(media: controller.media),
+                                  opaque: false,
+                                  fullscreenDialog: true,
+                                  transition: Transition.fadeIn,
+                                );
+                              },
+                              icon: const Icon(Icons.search_rounded),
+                            ),
                           ),
                         ),
                       ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -222,29 +229,118 @@ class _MobileHomeScreen extends GetView<HomeController> {
       );
     }
 
+    final shelves = buildMediaShelves(controller.media);
     return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
-        child: GridView.builder(
-          itemCount: controller.media.length,
-          padding: const EdgeInsets.only(bottom: 100),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2,
-            crossAxisSpacing: 20,
-            mainAxisSpacing: 25,
-            childAspectRatio: 3 / 5,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(0, 22, 0, 118),
+        children: [
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Your cinema',
+                  style: TextStyle(
+                    fontSize: 29,
+                    height: 1,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                SizedBox(height: 7),
+                Text(
+                  'Pick a mood, invite your people, stay in sync.',
+                  style: TextStyle(color: Colors.white60, fontSize: 13),
+                ),
+              ],
+            ),
           ),
-          itemBuilder: (context, index) {
-            final mediaElement = controller.media[index];
-            return MediaCard(
-              mediaElement: mediaElement,
-              isAudio: false, // update this when audio support is added
-              onPressed: () => showAdaptiveSheet(
-                CreateRoomBottomSheet(media: mediaElement),
-              ),
-            );
-          },
-        ),
+          const SizedBox(height: 24),
+          for (final shelf in shelves)
+            _MediaShelfSection(
+              shelf: shelf,
+              onFocused: controller.selectMediaAccent,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MediaShelfSection extends StatelessWidget {
+  const _MediaShelfSection({required this.shelf, required this.onFocused});
+
+  final MediaShelf shelf;
+  final ValueChanged<Media> onFocused;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 27),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        shelf.title,
+                        style: const TextStyle(
+                          fontSize: 19,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        shelf.subtitle,
+                        style: const TextStyle(
+                          color: Colors.white54,
+                          fontSize: 11.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Text(
+                  '${shelf.items.length}',
+                  style: const TextStyle(
+                    color: Colors.white38,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 244,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              itemCount: shelf.items.length,
+              separatorBuilder: (_, _) => const SizedBox(width: 14),
+              itemBuilder: (context, index) {
+                final item = shelf.items[index];
+                return SizedBox(
+                  width: 158,
+                  child: MediaCard(
+                    mediaElement: item,
+                    compact: true,
+                    onFocused: onFocused,
+                    onPressed: () =>
+                        showAdaptiveSheet(CreateRoomBottomSheet(media: item)),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -15,6 +15,8 @@ enum MessageType {
   chat,
   reaction,
   typing,
+  countdown,
+  rating,
   ack,
 }
 
@@ -191,12 +193,17 @@ class Message {
     required String userId,
     required String userName,
     required String emoji,
+    int? positionMs,
   }) {
     return Message(
       type: MessageType.reaction,
       roomId: roomId,
       userId: userId,
-      data: {'emoji': emoji, 'userName': userName},
+      data: {
+        'emoji': emoji,
+        'userName': userName,
+        if (positionMs != null) 'positionMs': positionMs,
+      },
     );
   }
 
@@ -211,6 +218,32 @@ class Message {
       roomId: roomId,
       userId: userId,
       data: {'isTyping': isTyping, 'userName': userName},
+    );
+  }
+
+  factory Message.countdown({
+    required String roomId,
+    required String userId,
+    required int seconds,
+  }) {
+    return Message(
+      type: MessageType.countdown,
+      roomId: roomId,
+      userId: userId,
+      data: {'seconds': seconds},
+    );
+  }
+
+  factory Message.rating({
+    required String roomId,
+    required String userId,
+    required int rating,
+  }) {
+    return Message(
+      type: MessageType.rating,
+      roomId: roomId,
+      userId: userId,
+      data: {'rating': rating},
     );
   }
 }

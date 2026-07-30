@@ -49,6 +49,17 @@ class RoomController extends GetxController with WidgetsBindingObserver {
 
   // Floating reactions
   RxList<Map<String, dynamic>> floatingReactions = <Map<String, dynamic>>[].obs;
+  final Rxn<DateTime> countdownEndsAt = Rxn<DateTime>();
+  final RxBool lobbyVisible = false.obs;
+  final RxBool showScorecard = false.obs;
+  final RxMap<String, int> reactionTotals = <String, int>{}.obs;
+  final RxMap<String, int> chatTotals = <String, int>{}.obs;
+  final RxMap<String, int> ratings = <String, int>{}.obs;
+  final Map<int, int> _reactionMoments = {};
+  Timer? _countdownTimer;
+  DateTime? _lastProgressPersistedAt;
+  String? currentMediaPath;
+  bool _openingCountdownUsed = false;
 
   // Ephemeral remote typing state, keyed by sender ID.
   final RxMap<String, String> typingUsers = <String, String>{}.obs;
@@ -93,6 +104,24 @@ class RoomController extends GetxController with WidgetsBindingObserver {
 
   // Callback for when subtitles change
   Function()? onSubtitleChanged;
+
+  bool get isHost => _uuid == room.value.hostId;
+
+  String get mostUsedReaction => reactionTotals.isEmpty
+      ? '—'
+      : reactionTotals.entries.reduce((a, b) => a.value >= b.value ? a : b).key;
+
+  String get biggestChatter => chatTotals.isEmpty
+      ? 'Quiet legends'
+      : chatTotals.entries.reduce((a, b) => a.value >= b.value ? a : b).key;
+
+  Duration? get crowdFavoriteMoment {
+    if (_reactionMoments.isEmpty) return null;
+    final entry = _reactionMoments.entries.reduce(
+      (a, b) => a.value >= b.value ? a : b,
+    );
+    return Duration(milliseconds: entry.key);
+  }
 
   @override
   void onInit() {
@@ -144,6 +173,8 @@ class RoomController extends GetxController with WidgetsBindingObserver {
           );
         }
       } else if (msg.type == MessageType.chat) {
+        final sender = msg.data['userName']?.toString() ?? 'Unknown';
+        chatTotals[sender] = (chatTotals[sender] ?? 0) + 1;
         _upsertChatMessage({
           'id': msg.eventId,
           'message': msg.data['message'] ?? '',
@@ -153,6 +184,13 @@ class RoomController extends GetxController with WidgetsBindingObserver {
               msg.data['timestamp'] ?? DateTime.now().toIso8601String(),
         });
       } else if (msg.type == MessageType.reaction) {
+        final emoji = msg.data['emoji']?.toString() ?? '❤️';
+        reactionTotals[emoji] = (reactionTotals[emoji] ?? 0) + 1;
+        final positionMs = (msg.data['positionMs'] as num?)?.round();
+        if (positionMs != null) {
+          final bucket = (positionMs / 5000).round() * 5000;
+          _reactionMoments[bucket] = (_reactionMoments[bucket] ?? 0) + 1;
+        }
         // Add floating reaction
         final reactionId = msg.eventId;
         floatingReactions.add({
@@ -166,12 +204,97 @@ class RoomController extends GetxController with WidgetsBindingObserver {
         });
       } else if (msg.type == MessageType.typing) {
         _applyTypingState(msg);
+      } else if (msg.type == MessageType.countdown) {
+        _applyCountdown(msg.data);
+      } else if (msg.type == MessageType.rating) {
+        final userId = msg.data['userId']?.toString() ?? msg.userId;
+        final rating = (msg.data['rating'] as num?)?.round() ?? 0;
+        if (userId.isNotEmpty && rating > 0) ratings[userId] = rating;
       }
     });
   }
 
   List<String> get typingUserNames =>
       typingUsers.values.toList(growable: false);
+
+  void _applyCountdown(Map<String, dynamic> data) {
+    final endsAt = DateTime.tryParse(data['endsAt']?.toString() ?? '');
+    if (endsAt == null) return;
+    _countdownTimer?.cancel();
+    countdownEndsAt.value = endsAt;
+    final delay = endsAt.difference(DateTime.now());
+    _countdownTimer = Timer(delay.isNegative ? Duration.zero : delay, () {
+      countdownEndsAt.value = null;
+      if (isHost && !room.value.isPlaying) {
+        unawaited(_playVideoNow());
+      }
+    });
+  }
+
+  Future<void> startCountdown() async {
+    if (room.value.id.isEmpty || !wsService.isJoined.value || !isHost) return;
+    await wsService.sendCountdown(room.value.id, _uuid, seconds: 3);
+  }
+
+  Future<void> _playVideoNow() async {
+    final position =
+        videoController?.value.position ?? room.value.currentPosition;
+    room.value = room.value.copyWith(
+      isPlaying: true,
+      currentPosition: position,
+    );
+    lobbyVisible.value = false;
+    unawaited(
+      _playbackSynchronizer.submitLocal(position: position, isPlaying: true),
+    );
+    await wsService.playVideo(room.value.id, _uuid, position);
+  }
+
+  Future<void> startMovieFromLobby() async {
+    if (countdownEndsAt.value != null) return;
+    _openingCountdownUsed = true;
+    await startCountdown();
+  }
+
+  Future<void> recordPlaybackProgress(
+    Duration position, {
+    Duration? duration,
+    bool force = false,
+  }) async {
+    final path = currentMediaPath;
+    if (path == null || path.isEmpty) return;
+    final now = DateTime.now();
+    if (!force &&
+        _lastProgressPersistedAt != null &&
+        now.difference(_lastProgressPersistedAt!) <
+            const Duration(seconds: 4)) {
+      return;
+    }
+    _lastProgressPersistedAt = now;
+    final media = isar.medias.filter().pathEqualTo(path).findFirstSync();
+    if (media == null) return;
+    media.playbackPositionMs = position.inMilliseconds
+        .clamp(0, 1 << 31)
+        .toInt();
+    if (duration != null && duration > Duration.zero) {
+      media.durationMs = duration.inMilliseconds;
+    }
+    media.lastWatchedAt = now;
+    final onlineNames = users
+        .where((user) => user.online && user.name.isNotEmpty)
+        .map((user) => user.name)
+        .toSet()
+        .toList();
+    if (onlineNames.length > 1) {
+      media.watchedTogetherAt = now;
+      media.watchedWith = onlineNames;
+    }
+    isar.writeTxnSync(() => isar.medias.putSync(media));
+    if (media.durationMs > 0 &&
+        media.playbackPositionMs >= media.durationMs * .97) {
+      showScorecard.value = true;
+    }
+  }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
@@ -242,8 +365,13 @@ class RoomController extends GetxController with WidgetsBindingObserver {
       for (final item in history.whereType<Map>()) {
         final payload = item['data'];
         if (payload is! Map) continue;
+        final messageId = item['id']?.toString() ?? '';
+        if (!chatMessages.any((message) => message['id'] == messageId)) {
+          final sender = payload['userName']?.toString() ?? 'Unknown';
+          chatTotals[sender] = (chatTotals[sender] ?? 0) + 1;
+        }
         _upsertChatMessage({
-          'id': item['id']?.toString() ?? '',
+          'id': messageId,
           'message': payload['message'] ?? '',
           'userName': payload['userName'] ?? 'Unknown',
           'userId': item['user_id']?.toString() ?? '',
@@ -281,6 +409,9 @@ class RoomController extends GetxController with WidgetsBindingObserver {
       currentPosition: Duration.zero,
       isPlaying: false,
     );
+    lobbyVisible.value = true;
+    showScorecard.value = false;
+    if (isHost) _openingCountdownUsed = false;
     unawaited(
       _playbackSynchronizer.submitLocal(
         position: Duration.zero,
@@ -355,6 +486,9 @@ class RoomController extends GetxController with WidgetsBindingObserver {
       currentPosition: Duration(milliseconds: positionMs),
       isPlaying: isPlaying,
     );
+    if (isPlaying || positionMs > 1000) {
+      lobbyVisible.value = false;
+    }
 
     final lifecycleState = WidgetsBinding.instance.lifecycleState;
     if (lifecycleState == null || lifecycleState == AppLifecycleState.resumed) {
@@ -439,6 +573,10 @@ class RoomController extends GetxController with WidgetsBindingObserver {
   }
 
   setMedia(Media media) {
+    currentMediaPath = media.path;
+    lobbyVisible.value = true;
+    showScorecard.value = false;
+    _openingCountdownUsed = false;
     room.value.currentVideoUrl = media.path;
     // Reset subtitle when changing media
     currentSubtitlePath.value = null;
@@ -552,6 +690,14 @@ class RoomController extends GetxController with WidgetsBindingObserver {
           room.value.currentVideoUrl = mediaItem.path;
           room.value.currentVideoTitle = mediaItem.name;
         }
+        currentMediaPath = mediaItem?.path;
+        lobbyVisible.value = true;
+        showScorecard.value = false;
+        _openingCountdownUsed = false;
+        reactionTotals.clear();
+        chatTotals.clear();
+        ratings.clear();
+        _reactionMoments.clear();
         _uuid = res.data['user']['id'];
         await wsService.joinRoom(room.value.id, _uuid, user.name);
 
@@ -610,6 +756,16 @@ class RoomController extends GetxController with WidgetsBindingObserver {
         );
         _resetPlaybackSync();
         room.value = Room.fromJson(res.data['room']);
+        currentMediaPath = _isNetworkUrl(room.value.currentVideoUrl ?? '')
+            ? null
+            : room.value.currentVideoUrl;
+        lobbyVisible.value = true;
+        showScorecard.value = false;
+        _openingCountdownUsed = true;
+        reactionTotals.clear();
+        chatTotals.clear();
+        ratings.clear();
+        _reactionMoments.clear();
         _uuid = res.data['user']['id'].toString();
         users.clear();
         final roomUsers = res.data['room']['users'];
@@ -682,18 +838,14 @@ class RoomController extends GetxController with WidgetsBindingObserver {
     }
     final position =
         videoController?.value.position ?? room.value.currentPosition;
-
-    room.value = room.value.copyWith(
-      isPlaying: true,
-      currentPosition: position,
-    );
-    unawaited(
-      _playbackSynchronizer.submitLocal(
-        position: position,
-        isPlaying: true,
-      ),
-    );
-    await wsService.playVideo(room.value.id, _uuid, position);
+    if (isHost &&
+        !_openingCountdownUsed &&
+        position <= const Duration(seconds: 1)) {
+      _openingCountdownUsed = true;
+      await startCountdown();
+      return;
+    }
+    await _playVideoNow();
   }
 
   Future<void> pauseVideo() async {
@@ -709,10 +861,7 @@ class RoomController extends GetxController with WidgetsBindingObserver {
       currentPosition: position,
     );
     unawaited(
-      _playbackSynchronizer.submitLocal(
-        position: position,
-        isPlaying: false,
-      ),
+      _playbackSynchronizer.submitLocal(position: position, isPlaying: false),
     );
     await wsService.pauseVideo(room.value.id, _uuid, position);
   }
@@ -749,6 +898,10 @@ class RoomController extends GetxController with WidgetsBindingObserver {
       users.clear();
       chatMessages.clear();
       floatingReactions.clear();
+      countdownEndsAt.value = null;
+      _countdownTimer?.cancel();
+      lobbyVisible.value = false;
+      showScorecard.value = false;
       _clearTypingUsers();
       _localTypingIdleTimer?.cancel();
       _localTypingActive = false;
@@ -760,6 +913,7 @@ class RoomController extends GetxController with WidgetsBindingObserver {
         name: '',
         hostId: '',
       );
+      currentMediaPath = null;
     }
   }
 
@@ -778,7 +932,19 @@ class RoomController extends GetxController with WidgetsBindingObserver {
   // Send reaction
   Future<void> sendReaction(String emoji) async {
     if (room.value.id == '') return;
-    await wsService.sendReaction(room.value.id, _uuid, user.name, emoji);
+    await wsService.sendReaction(
+      room.value.id,
+      _uuid,
+      user.name,
+      emoji,
+      positionMs: videoController?.value.position.inMilliseconds,
+    );
+  }
+
+  Future<void> submitRating(int rating) async {
+    if (room.value.id.isEmpty || rating < 1 || rating > 5) return;
+    ratings[_uuid] = rating;
+    await wsService.sendRating(room.value.id, _uuid, rating);
   }
 
   void chatInputChanged(String value) {
@@ -820,6 +986,7 @@ class RoomController extends GetxController with WidgetsBindingObserver {
     _playbackSynchronizer.dispose();
     _localTypingIdleTimer?.cancel();
     _clearTypingUsers();
+    _countdownTimer?.cancel();
     super.onClose();
   }
 }

@@ -8,6 +8,7 @@ import 'package:syncy/controllers/room_controller.dart';
 import 'package:syncy/models/media.dart';
 import 'package:syncy/models/remote_media.dart';
 import 'package:syncy/models/room.dart';
+import 'package:syncy/models/room_preset.dart';
 import 'package:syncy/models/user.dart';
 import 'package:syncy/services/lan/lan_host_service.dart';
 import 'package:syncy/utils/platform_utils.dart';
@@ -151,37 +152,40 @@ class _CreateRoomBottomSheetState extends State<CreateRoomBottomSheet> {
                   },
                 ),
                 const SizedBox(height: 20),
-                SegmentedButton<RoomMode>(
-                  segments: const [
-                    ButtonSegment(
-                      value: RoomMode.friends,
-                      icon: Icon(Icons.groups_2_rounded),
-                      label: Text('Friends'),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Text(
+                      'Choose a room vibe',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
-                    ButtonSegment(
-                      value: RoomMode.couple,
-                      icon: Icon(Icons.favorite_rounded),
-                      label: Text('Couple'),
-                    ),
-                  ],
-                  selected: {_roomMode},
-                  showSelectedIcon: false,
-                  onSelectionChanged: (selection) {
-                    setState(() => _roomMode = selection.first);
-                  },
+                  ),
                 ),
                 const SizedBox(height: 8),
-                Text(
-                  _roomMode == RoomMode.couple
-                      ? 'A softer space with affectionate reactions'
-                      : 'A lively room with fun group reactions',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodySmall?.copyWith(color: Colors.white70),
+                SizedBox(
+                  height: 142,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    itemCount: roomPresets.length,
+                    separatorBuilder: (_, _) => const SizedBox(width: 10),
+                    itemBuilder: (context, index) {
+                      final preset = roomPresets[index];
+                      return _RoomPresetCard(
+                        preset: preset,
+                        selected: preset.mode == _roomMode,
+                        onTap: () => setState(() => _roomMode = preset.mode),
+                      );
+                    },
+                  ),
                 ),
                 const SizedBox(height: 20),
                 ElevatedButton.icon(
-                  onPressed: _roomNameController.text.trim().isEmpty || _creating
+                  onPressed:
+                      _roomNameController.text.trim().isEmpty || _creating
                       ? null
                       : _create,
                   icon: const Icon(Icons.start_rounded, color: Colors.white),
@@ -223,6 +227,113 @@ class _CreateRoomBottomSheetState extends State<CreateRoomBottomSheet> {
                       ),
                 ),
               ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RoomPresetCard extends StatelessWidget {
+  const _RoomPresetCard({
+    required this.preset,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final RoomPreset preset;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      selected: selected,
+      button: true,
+      label: '${preset.label}: ${preset.tagline}',
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 220),
+        width: 132,
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              preset.accent.withValues(alpha: selected ? .56 : .2),
+              preset.secondary.withValues(alpha: selected ? .44 : .12),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: selected ? preset.accent : Colors.white12,
+            width: selected ? 1.6 : 1,
+          ),
+          boxShadow: selected
+              ? [
+                  BoxShadow(
+                    color: preset.accent.withValues(alpha: .28),
+                    blurRadius: 20,
+                  ),
+                ]
+              : null,
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(20),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: .2),
+                          borderRadius: BorderRadius.circular(11),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(7),
+                          child: Icon(
+                            preset.icon,
+                            color: preset.accent,
+                            size: 20,
+                          ),
+                        ),
+                      ),
+                      const Spacer(),
+                      if (selected)
+                        Icon(
+                          Icons.check_circle_rounded,
+                          color: preset.accent,
+                          size: 18,
+                        ),
+                    ],
+                  ),
+                  const Spacer(),
+                  Text(
+                    preset.label,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    preset.tagline,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white60,
+                      height: 1.15,
+                      fontSize: 10,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

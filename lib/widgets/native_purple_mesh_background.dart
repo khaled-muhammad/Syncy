@@ -7,10 +7,12 @@ class NativePurpleMeshBackground extends StatefulWidget {
     super.key,
     required this.child,
     this.animate = true,
+    this.accent,
   });
 
   final Widget child;
   final bool animate;
+  final Color? accent;
 
   @override
   State<NativePurpleMeshBackground> createState() =>
@@ -49,7 +51,10 @@ class _NativePurpleMeshBackgroundState extends State<NativePurpleMeshBackground>
         child: AnimatedBuilder(
           animation: _animation,
           builder: (context, child) => CustomPaint(
-            painter: _PurpleMeshPainter(_animation.value),
+            painter: _PurpleMeshPainter(
+              _animation.value,
+              widget.accent ?? const Color(0xFF7137E8),
+            ),
             child: child,
           ),
           child: widget.child,
@@ -60,9 +65,10 @@ class _NativePurpleMeshBackgroundState extends State<NativePurpleMeshBackground>
 }
 
 class _PurpleMeshPainter extends CustomPainter {
-  const _PurpleMeshPainter(this.phase);
+  const _PurpleMeshPainter(this.phase, this.accent);
 
   final double phase;
+  final Color accent;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -86,7 +92,7 @@ class _PurpleMeshPainter extends CustomPainter {
         size.height * (0.22 + math.cos(t * .7) * 0.04),
       ),
       radius: size.shortestSide * .72,
-      color: const Color(0xFF7137E8),
+      color: accent,
       opacity: .34,
     );
     _drawGlow(
@@ -149,5 +155,5 @@ class _PurpleMeshPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_PurpleMeshPainter oldDelegate) =>
-      oldDelegate.phase != phase;
+      oldDelegate.phase != phase || oldDelegate.accent != accent;
 }

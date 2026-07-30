@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:isar_community/isar.dart';
 import 'package:syncy/models/media.dart';
@@ -55,7 +56,8 @@ List<FolderNode> buildFolderTree(String rootPath, Iterable<String> mediaPaths) {
       currentPath = '$currentPath/${segments[depth]}';
       final node = nodes.putIfAbsent(
         currentPath,
-        () => FolderNode(path: currentPath, name: segments[depth], depth: depth),
+        () =>
+            FolderNode(path: currentPath, name: segments[depth], depth: depth),
       );
       node.totalCount++;
       if (depth == segments.length - 2) node.directCount++;
@@ -89,6 +91,7 @@ class LibraryController extends GetxController {
 
   final isScanning = false.obs;
   final scanStatus = ''.obs;
+  final selectedAccentValue = const Color(0xFF7137E8).toARGB32().obs;
 
   bool _scanInProgress = false;
 
@@ -100,6 +103,20 @@ class LibraryController extends GetxController {
   }
 
   void _loadRoots() {
+    final unstamped = isar.medias
+        .where()
+        .findAllSync()
+        .where((item) => item.addedAt == null)
+        .toList();
+    if (unstamped.isNotEmpty) {
+      final now = DateTime.now();
+      isar.writeTxnSync(() {
+        for (final item in unstamped) {
+          item.addedAt = now;
+        }
+        isar.medias.putAllSync(unstamped);
+      });
+    }
     roots.value = isar.folders.where().findAllSync();
     if (roots.isNotEmpty) {
       selectRoot(roots.first);
@@ -178,7 +195,9 @@ class LibraryController extends GetxController {
               (path) => Media()
                 ..path = path
                 ..name = _fileName(path)
-                ..thumbnailPath = '',
+                ..thumbnailPath = ''
+                ..addedAt = DateTime.now()
+                ..hasSubtitles = _hasSiblingSubtitle(path),
             )
             .toList(growable: false);
 
@@ -261,6 +280,12 @@ class LibraryController extends GetxController {
     _refreshVisibleMedia();
   }
 
+  void selectMediaAccent(Media item) {
+    selectedAccentValue.value = item.dominantColorValue == 0
+        ? const Color(0xFF7137E8).toARGB32()
+        : item.dominantColorValue;
+  }
+
   void _refreshVisibleMedia() {
     final root = selectedRoot.value;
     if (root == null) {
@@ -312,6 +337,13 @@ class LibraryController extends GetxController {
   }
 
   String _fileName(String path) => path.replaceAll('\\', '/').split('/').last;
+
+  bool _hasSiblingSubtitle(String videoPath) {
+    final separator = videoPath.lastIndexOf(RegExp(r'[/\\]'));
+    final dot = videoPath.lastIndexOf('.');
+    final base = dot > separator ? videoPath.substring(0, dot) : videoPath;
+    return File('$base.srt').existsSync() || File('$base.vtt').existsSync();
+  }
 
   String _directoryName(String path) {
     final segments = path
