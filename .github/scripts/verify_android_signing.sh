@@ -21,7 +21,9 @@ if [[ ! "${expected_fingerprint}" =~ ^[[:xdigit:]]{64}$ ]]; then
   exit 1
 fi
 
-if command -v apksigner >/dev/null 2>&1; then
+if [[ -n "${APKSIGNER_PATH:-}" ]]; then
+  apksigner_path="${APKSIGNER_PATH}"
+elif command -v apksigner >/dev/null 2>&1; then
   apksigner_path="$(command -v apksigner)"
 else
   android_sdk_root="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
@@ -46,23 +48,45 @@ for apk_path in "$@"; do
     exit 1
   fi
 
-  verification_output="$("${apksigner_path}" verify --verbose --print-certs "${apk_path}")"
-  mapfile -t reported_signer_fingerprints < <(
+  verification_output="$("${apksigner_path}" verify --verbose --print-certs-pem "${apk_path}")"
+  mapfile -t encoded_signer_certificates < <(
     printf '%s\n' "${verification_output}" |
-      sed -nE \
-        's/^[[:space:]]*Signer (#[0-9]+|\([^)]*\)) certificate SHA-256 digest:[[:space:]]*//p'
+      awk '
+        /^[[:space:]]*-----BEGIN CERTIFICATE-----[[:space:]]*$/ {
+          reading_certificate = 1
+          encoded_certificate = ""
+          next
+        }
+        /^[[:space:]]*-----END CERTIFICATE-----[[:space:]]*$/ {
+          if (reading_certificate) {
+            print encoded_certificate
+          }
+          reading_certificate = 0
+          next
+        }
+        reading_certificate {
+          gsub(/[[:space:]]/, "")
+          encoded_certificate = encoded_certificate $0
+        }
+      '
   )
 
-  if (( ${#reported_signer_fingerprints[@]} == 0 )); then
-    echo "Could not parse a signing certificate SHA-256 digest for ${apk_path}." >&2
+  if (( ${#encoded_signer_certificates[@]} == 0 )); then
+    echo "Could not extract a signing certificate from ${apk_path}." >&2
     exit 1
   fi
 
   declare -A unique_signer_fingerprints=()
-  for reported_fingerprint in "${reported_signer_fingerprints[@]}"; do
-    normalized_fingerprint="$(normalize_fingerprint "${reported_fingerprint}")"
+  for encoded_certificate in "${encoded_signer_certificates[@]}"; do
+    certificate_fingerprint="$(
+      printf '%s' "${encoded_certificate}" |
+        base64 --decode |
+        sha256sum |
+        awk '{ print $1 }'
+    )"
+    normalized_fingerprint="$(normalize_fingerprint "${certificate_fingerprint}")"
     if [[ ! "${normalized_fingerprint}" =~ ^[[:xdigit:]]{64}$ ]]; then
-      echo "apksigner reported an invalid SHA-256 certificate digest for ${apk_path}." >&2
+      echo "Could not calculate a certificate SHA-256 digest for ${apk_path}." >&2
       exit 1
     fi
     unique_signer_fingerprints["${normalized_fingerprint}"]=1

@@ -6,8 +6,9 @@ verifier="${script_directory}/verify_android_signing.sh"
 apk_path="$(mktemp)"
 trap 'rm -f "${apk_path}"' EXIT
 
-expected_fingerprint="24597C73140A9C8A181486E209B3891250E5F8CC3721124FEAE9AA06D0771B59"
-other_fingerprint="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+expected_fingerprint="E46125B876099E019B84095CB634AE65C7457F61D1BE26D2FD65BDE5BA50CDD6"
+encoded_certificate="c3luY3ktY2VydGlmaWNhdGU="
+other_encoded_certificate="ZGlmZmVyZW50LWNlcnRpZmljYXRl"
 
 apksigner() {
   printf '%s\n' "${MOCK_APKSIGNER_OUTPUT:?MOCK_APKSIGNER_OUTPUT is not set}"
@@ -21,18 +22,31 @@ run_verifier() {
 }
 
 run_verifier \
-  "Signer #1 certificate SHA-256 digest: ${expected_fingerprint}"
+  "Verifies
+Signer #1 certificate PEM:
+-----BEGIN CERTIFICATE-----
+${encoded_certificate}
+-----END CERTIFICATE-----"
 
 run_verifier \
-  "Signer (minSdkVersion=24, maxSdkVersion=35) certificate SHA-256 digest: ${expected_fingerprint}"
-
-run_verifier \
-  "Signer #1 certificate SHA-256 digest: ${expected_fingerprint}
-Signer (minSdkVersion=24, maxSdkVersion=35) certificate SHA-256 digest: ${expected_fingerprint}"
+  "Signer #1 certificate PEM:
+-----BEGIN CERTIFICATE-----
+${encoded_certificate}
+-----END CERTIFICATE-----
+Signer (minSdkVersion=24, maxSdkVersion=35) certificate PEM:
+-----BEGIN CERTIFICATE-----
+${encoded_certificate}
+-----END CERTIFICATE-----"
 
 if run_verifier \
-  "Signer #1 certificate SHA-256 digest: ${expected_fingerprint}
-Signer #2 certificate SHA-256 digest: ${other_fingerprint}" \
+  "Signer #1 certificate PEM:
+-----BEGIN CERTIFICATE-----
+${encoded_certificate}
+-----END CERTIFICATE-----
+Signer #2 certificate PEM:
+-----BEGIN CERTIFICATE-----
+${other_encoded_certificate}
+-----END CERTIFICATE-----" \
   >/dev/null 2>&1; then
   echo "Verifier accepted multiple signing certificates." >&2
   exit 1
