@@ -47,17 +47,35 @@ for apk_path in "$@"; do
   fi
 
   verification_output="$("${apksigner_path}" verify --verbose --print-certs "${apk_path}")"
-  mapfile -t signer_fingerprints < <(
+  mapfile -t reported_signer_fingerprints < <(
     printf '%s\n' "${verification_output}" |
-      sed -n 's/^Signer #[0-9][0-9]* certificate SHA-256 digest: //p'
+      sed -nE \
+        's/^[[:space:]]*Signer (#[0-9]+|\([^)]*\)) certificate SHA-256 digest:[[:space:]]*//p'
   )
 
-  if (( ${#signer_fingerprints[@]} != 1 )); then
-    echo "Expected exactly one signer for ${apk_path}; found ${#signer_fingerprints[@]}." >&2
+  if (( ${#reported_signer_fingerprints[@]} == 0 )); then
+    echo "Could not parse a signing certificate SHA-256 digest for ${apk_path}." >&2
     exit 1
   fi
 
-  actual_fingerprint="$(normalize_fingerprint "${signer_fingerprints[0]}")"
+  declare -A unique_signer_fingerprints=()
+  for reported_fingerprint in "${reported_signer_fingerprints[@]}"; do
+    normalized_fingerprint="$(normalize_fingerprint "${reported_fingerprint}")"
+    if [[ ! "${normalized_fingerprint}" =~ ^[[:xdigit:]]{64}$ ]]; then
+      echo "apksigner reported an invalid SHA-256 certificate digest for ${apk_path}." >&2
+      exit 1
+    fi
+    unique_signer_fingerprints["${normalized_fingerprint}"]=1
+  done
+
+  if (( ${#unique_signer_fingerprints[@]} != 1 )); then
+    echo \
+      "Expected exactly one unique signing certificate for ${apk_path}; " \
+      "found ${#unique_signer_fingerprints[@]}." >&2
+    exit 1
+  fi
+
+  actual_fingerprint="${!unique_signer_fingerprints[@]}"
   if [[ "${actual_fingerprint}" != "${expected_fingerprint}" ]]; then
     echo "Unexpected signing certificate for ${apk_path}." >&2
     echo "Expected: ${expected_fingerprint}" >&2

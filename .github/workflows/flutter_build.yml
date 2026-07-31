@@ -40,6 +40,9 @@ jobs:
       - name: Run tests
         run: flutter test
 
+      - name: Test Android signing verifier
+        run: bash .github/scripts/test_verify_android_signing.sh
+
       - name: Restore and validate Android release keystore
         if: github.event_name != 'pull_request'
         env:
