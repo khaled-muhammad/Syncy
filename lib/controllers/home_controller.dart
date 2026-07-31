@@ -7,6 +7,7 @@ import 'package:isar_community/isar.dart';
 import 'package:flutter_video_info/flutter_video_info.dart';
 import 'package:syncy/models/media.dart';
 import 'package:syncy/services/media_discovery_service.dart';
+import 'package:syncy/services/media_reconciliation_service.dart';
 import 'package:syncy/services/thumbnail_service.dart';
 import 'package:syncy/services/subtitle_discovery_service.dart';
 import 'package:syncy/utils/files.dart';
@@ -18,6 +19,7 @@ class HomeController extends GetxController with WidgetsBindingObserver {
   final isLoading = true.obs;
   final isSyncing = true.obs;
   final syncStatusMessage = 'Checking for new media…'.obs;
+  final syncErrorMessage = ''.obs;
   final newMediaCount = 0.obs;
   final currentDirectory = ''.obs;
   final hasPermission = false.obs;
@@ -28,27 +30,29 @@ class HomeController extends GetxController with WidgetsBindingObserver {
 
   bool _scanInProgress = false;
 
-  final activeIndex = 1.obs;
-
   @override
   void onInit() {
     super.onInit();
     WidgetsBinding.instance.addObserver(this);
-    _loadCachedMedia();
-    checkPermissions();
     _setupThumbnailCallbacks();
+    unawaited(_initialize());
   }
 
-  void _loadCachedMedia() {
-    media.value = isar.medias.where().findAllSync();
+  Future<void> _initialize() async {
+    await _loadCachedMedia();
+    await checkPermissions();
+  }
+
+  Future<void> _loadCachedMedia() async {
+    media.value = await isar.medias.where().findAll();
     final unstamped = media.where((item) => item.addedAt == null).toList();
     if (unstamped.isNotEmpty) {
       final now = DateTime.now();
-      isar.writeTxnSync(() {
+      await isar.writeTxn(() async {
         for (final item in unstamped) {
           item.addedAt = now;
         }
-        isar.medias.putAllSync(unstamped);
+        await isar.medias.putAll(unstamped);
       });
     }
     isLoading.value = media.isEmpty;
@@ -77,8 +81,9 @@ class HomeController extends GetxController with WidgetsBindingObserver {
 
   Future<void> checkPermissions() async {
     final hasStoragePermission = await StorageHelper.checkStoragePermission();
-    final hasManagePermission =
-        await StorageHelper.checkManageExternalStoragePermission();
+    final hasManagePermission = hasStoragePermission
+        ? false
+        : await StorageHelper.checkManageExternalStoragePermission();
 
     hasPermission.value = hasStoragePermission || hasManagePermission;
 
@@ -99,14 +104,17 @@ class HomeController extends GetxController with WidgetsBindingObserver {
   Future<void> loadMediaFiles() async {
     if (_scanInProgress) return;
 
+    var syncStage = 'starting media discovery';
     _scanInProgress = true;
     final startedAt = DateTime.now();
     isLoading.value = media.isEmpty;
     isSyncing.value = true;
+    syncErrorMessage.value = '';
     newMediaCount.value = 0;
     syncStatusMessage.value = 'Checking for new media…';
 
     try {
+      syncStage = 'opening device storage';
       final localStoragePath = await localStorageDir();
       currentDirectory.value = localStoragePath;
 
@@ -114,23 +122,32 @@ class HomeController extends GetxController with WidgetsBindingObserver {
         throw const FileSystemException('Media storage is unavailable');
       }
 
-      final mediaFiles = await _mediaDiscovery.discoverVideoPaths(
+      syncStage = 'reading Android media';
+      final discovery = await _mediaDiscovery.discoverVideoPathsWithResult(
         localStoragePath,
       );
-      final existingPaths = isar.medias
-          .where()
-          .findAllSync()
-          .map((item) => item.path)
-          .toSet();
-      final newVideoPaths = mediaFiles
-          .where((path) => !existingPaths.contains(path))
+      syncStage = 'checking the saved library';
+      final existingMedia = await isar.medias.where().findAll();
+      final diff = calculateMediaPathDiff(
+        knownPaths: existingMedia.map((item) => item.path),
+        discoveredPaths: discovery.paths,
+      );
+      final canRemoveMissing =
+          discovery.isComplete &&
+          await StorageHelper.canReconcileDeletedMedia();
+      final removedPaths = canRemoveMissing
+          ? diff.removedPaths.toSet()
+          : const <String>{};
+      final removedMedia = existingMedia
+          .where((item) => removedPaths.contains(item.path))
           .toList(growable: false);
+      final newVideoPaths = diff.addedPaths;
 
       newMediaCount.value = newVideoPaths.length;
-      if (newVideoPaths.isNotEmpty) {
+      if (newVideoPaths.isNotEmpty || removedMedia.isNotEmpty) {
         syncStatusMessage.value = newVideoPaths.length == 1
             ? 'Adding 1 new video…'
-            : 'Adding ${newVideoPaths.length} new videos…';
+            : 'Updating your media library…';
 
         final newRecords = newVideoPaths
             .map((path) {
@@ -139,32 +156,49 @@ class HomeController extends GetxController with WidgetsBindingObserver {
                 ..name = _fileName(path)
                 ..thumbnailPath = ''
                 ..addedAt = DateTime.now()
-                ..hasSubtitles = _hasSiblingSubtitle(path);
+                ..hasSubtitles = false;
             })
             .toList(growable: false);
 
-        // A single transaction is dramatically faster than opening a database
-        // transaction for every discovered file.
-        isar.writeTxnSync(() => isar.medias.putAllSync(newRecords));
-        media.value = isar.medias.where().findAllSync();
+        // Cancel first so a thumbnail completing during this transaction can
+        // never recreate a record that discovery proved was deleted.
+        thumbnailService.cancelRequestsForPaths(removedPaths);
+
+        // One transaction keeps additions and deletions atomic and avoids a
+        // per-file database round trip.
+        syncStage = 'reconciling the media library';
+        await isar.writeTxn(() async {
+          if (removedMedia.isNotEmpty) {
+            await isar.medias.deleteAll(
+              removedMedia.map((item) => item.id).toList(growable: false),
+            );
+          }
+          if (newRecords.isNotEmpty) await isar.medias.putAll(newRecords);
+        });
+        media.value = await isar.medias.where().findAll();
+        await thumbnailService.deleteArtifactsForMedia(removedMedia);
+        if (newVideoPaths.isNotEmpty) {
+          unawaited(_enrichSubtitleBadges(newVideoPaths));
+        }
       }
 
-      if (newVideoPaths.isNotEmpty) {
-        await thumbnailService.requestMultipleThumbnails(newVideoPaths);
-      }
-
-      await thumbnailService.generateMissingThumbnails();
+      // Thumbnail extraction can take minutes on a library with thousands of
+      // videos. Queue it in the background so discovery never keeps the UI in
+      // a blocking syncing state.
+      unawaited(_queueThumbnails(newVideoPaths));
       if (!isDesktop) unawaited(_enrichVideoMetadata());
-      syncStatusMessage.value = newVideoPaths.isEmpty
-          ? 'Media is up to date'
-          : newVideoPaths.length == 1
-          ? '1 new video added'
-          : '${newVideoPaths.length} new videos added';
-    } catch (e) {
-      syncStatusMessage.value = 'Couldn’t finish media sync';
+      syncStatusMessage.value = _syncSummary(
+        addedCount: newVideoPaths.length,
+        removedCount: removedMedia.length,
+      );
+    } catch (error, stackTrace) {
+      debugPrint('Media sync failed while $syncStage: $error\n$stackTrace');
+      syncStatusMessage.value = 'Couldn’t finish $syncStage';
+      syncErrorMessage.value =
+          'Sync stopped while $syncStage. Your media was not removed.';
       Get.snackbar(
         'Media sync paused',
-        'Your saved library is still available. Pull to refresh and try again.',
+        'Sync stopped while $syncStage. Pull to refresh and try again.',
         snackPosition: SnackPosition.BOTTOM,
         duration: const Duration(seconds: 3),
       );
@@ -186,8 +220,62 @@ class HomeController extends GetxController with WidgetsBindingObserver {
     return path.replaceAll('\\', '/').split('/').last;
   }
 
-  bool _hasSiblingSubtitle(String videoPath) {
-    return hasMatchingSubtitleSync(videoPath);
+  String _syncSummary({required int addedCount, required int removedCount}) {
+    if (addedCount == 0 && removedCount == 0) return 'Media is up to date';
+    if (addedCount > 0 && removedCount > 0) {
+      return '$addedCount added · $removedCount removed';
+    }
+    if (addedCount > 0) {
+      return addedCount == 1
+          ? '1 new video added'
+          : '$addedCount new videos added';
+    }
+    return removedCount == 1
+        ? '1 deleted video removed'
+        : '$removedCount deleted videos removed';
+  }
+
+  Future<void> _queueThumbnails(List<String> newVideoPaths) async {
+    if (newVideoPaths.isNotEmpty) {
+      await thumbnailService.requestMultipleThumbnails(newVideoPaths);
+    }
+    await thumbnailService.generateMissingThumbnails();
+  }
+
+  Future<void> _enrichSubtitleBadges(List<String> videoPaths) async {
+    try {
+      final matches = await findVideoPathsWithMatchingSubtitles(videoPaths);
+      if (matches.isEmpty) return;
+
+      final candidates = (await isar.medias.where().findAll())
+          .where((item) => matches.contains(item.path))
+          .toList(growable: false);
+      var matchingRecords = <Media>[];
+      await isar.writeTxn(() async {
+        matchingRecords =
+            (await isar.medias.getAll(
+                  candidates.map((item) => item.id).toList(growable: false),
+                ))
+                .whereType<Media>()
+                .where((item) => matches.contains(item.path))
+                .toList();
+        for (final item in matchingRecords) {
+          item.hasSubtitles = true;
+        }
+        if (matchingRecords.isNotEmpty) {
+          await isar.medias.putAll(matchingRecords);
+        }
+      });
+      for (final item in matchingRecords) {
+        final index = media.indexWhere((candidate) => candidate.id == item.id);
+        if (index != -1) media[index] = item;
+      }
+      media.refresh();
+    } catch (error, stackTrace) {
+      // Subtitle badges are optional. Restricted Android directories or a
+      // malformed sidecar must never prevent the videos from being saved.
+      debugPrint('Subtitle discovery skipped: $error\n$stackTrace');
+    }
   }
 
   Future<void> refreshMediaFiles() async {
@@ -213,13 +301,20 @@ class HomeController extends GetxController with WidgetsBindingObserver {
         final metadata = await info.getVideoInfo(item.path);
         final duration = metadata?.duration?.round() ?? 0;
         if (duration <= 0) continue;
-        item.durationMs = duration;
-        isar.writeTxnSync(() => isar.medias.putSync(item));
+        Media? updated;
+        isar.writeTxnSync(() {
+          final current = isar.medias.getSync(item.id);
+          if (current == null || current.path != item.path) return;
+          current.durationMs = duration;
+          isar.medias.putSync(current);
+          updated = current;
+        });
+        if (updated == null) continue;
         final index = media.indexWhere(
-          (candidate) => candidate.path == item.path,
+          (candidate) => candidate.path == updated!.path,
         );
         if (index != -1) {
-          media[index] = item;
+          media[index] = updated!;
           media.refresh();
         }
       } catch (_) {

@@ -14,7 +14,13 @@ import 'package:syncy/models/media.dart';
 import 'package:syncy/utils/files.dart';
 import 'package:syncy/utils/platform_utils.dart';
 
-enum ThumbnailRequestStatus { pending, processing, completed, failed }
+enum ThumbnailRequestStatus {
+  pending,
+  processing,
+  completed,
+  failed,
+  cancelled,
+}
 
 class ThumbnailRequest {
   final String id;
@@ -42,6 +48,12 @@ class ThumbnailService extends GetxService {
   final RxBool _isProcessing = false.obs;
   final RxInt _processedCount = 0.obs;
   final RxInt _failedCount = 0.obs;
+  final Set<String> _reservedVideoPaths = <String>{};
+  final Set<String> _cancelledVideoPaths = <String>{};
+  final Set<String> _cancelledThumbnailPaths = <String>{};
+  final Map<String, ThumbnailRequest> _activeRequests = {};
+  bool _missingThumbnailScanInProgress = false;
+  int _nextRequestId = 0;
 
   final List<Function(Media)> _onThumbnailCompleted = [];
   final List<Function(String, String)> _onThumbnailFailed = [];
@@ -105,15 +117,40 @@ class ThumbnailService extends GetxService {
   }
 
   Future<String?> requestThumbnail(String videoPath) async {
-    try {
-      final queuedRequest = _requestQueue.firstWhereOrNull(
-        (request) =>
-            request.videoPath == videoPath &&
-            (request.status == ThumbnailRequestStatus.pending ||
-                request.status == ThumbnailRequestStatus.processing),
-      );
-      if (queuedRequest != null) return queuedRequest.outputPath;
+    final activeRequest = _activeRequests[videoPath];
+    if (activeRequest != null) return activeRequest.outputPath;
+    if (!_reservedVideoPaths.add(videoPath)) return null;
 
+    try {
+      return await _enqueueReservedThumbnail(videoPath);
+    } finally {
+      if (!_activeRequests.containsKey(videoPath)) {
+        _reservedVideoPaths.remove(videoPath);
+      }
+    }
+  }
+
+  Future<void> requestMultipleThumbnails(List<String> videoPaths) async {
+    final newlyReserved = <String>[];
+    for (final videoPath in videoPaths) {
+      if (_reservedVideoPaths.add(videoPath)) newlyReserved.add(videoPath);
+    }
+
+    for (var index = 0; index < newlyReserved.length; index++) {
+      final videoPath = newlyReserved[index];
+      try {
+        await _enqueueReservedThumbnail(videoPath);
+      } finally {
+        if (!_activeRequests.containsKey(videoPath)) {
+          _reservedVideoPaths.remove(videoPath);
+        }
+      }
+      if (index % 50 == 49) await Future<void>.delayed(Duration.zero);
+    }
+  }
+
+  Future<String?> _enqueueReservedThumbnail(String videoPath) async {
+    try {
       final videoFile = File(videoPath);
       if (!await videoFile.exists()) {
         print('Video file does not exist: $videoPath');
@@ -132,10 +169,10 @@ class ThumbnailService extends GetxService {
       final thumbnailPath =
           '$_thumbnailsDirectory/${nameWithoutExtension}_${DateTime.now().millisecondsSinceEpoch}.jpg';
 
-      final existingMedia = _isar.medias
+      final existingMedia = await _isar.medias
           .filter()
           .pathEqualTo(videoPath)
-          .findFirstSync();
+          .findFirst();
       if (existingMedia != null &&
           existingMedia.thumbnailPath != null &&
           existingMedia.thumbnailPath!.isNotEmpty) {
@@ -147,47 +184,45 @@ class ThumbnailService extends GetxService {
       }
 
       final request = ThumbnailRequest(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        id: '${DateTime.now().microsecondsSinceEpoch}-${_nextRequestId++}',
         videoPath: videoPath,
         outputPath: thumbnailPath,
         createdAt: DateTime.now(),
       );
-
+      _activeRequests[videoPath] = request;
       _requestQueue.add(request);
       print('Added thumbnail request for: $videoPath');
-
       return thumbnailPath;
-    } catch (e) {
-      print('Error requesting thumbnail for $videoPath: $e');
+    } catch (error) {
+      print('Error requesting thumbnail for $videoPath: $error');
       return null;
     }
   }
 
-  Future<void> requestMultipleThumbnails(List<String> videoPaths) async {
-    for (final videoPath in videoPaths) {
-      await requestThumbnail(videoPath);
-    }
-  }
-
   Future<void> generateMissingThumbnails() async {
+    if (_missingThumbnailScanInProgress) return;
+    _missingThumbnailScanInProgress = true;
     try {
-      final mediaWithoutThumbnails = _isar.medias
+      final mediaWithoutThumbnails = await _isar.medias
           .filter()
           .thumbnailPathIsNull()
           .or()
           .thumbnailPathEqualTo('')
-          .findAllSync();
+          .findAll();
       print(
         'Found ${mediaWithoutThumbnails.length} media files without thumbnails',
       );
 
-      for (final media in mediaWithoutThumbnails) {
-        if (isVideo(media.path)) {
-          await requestThumbnail(media.path);
-        }
-      }
+      await requestMultipleThumbnails(
+        mediaWithoutThumbnails
+            .where((media) => isVideo(media.path))
+            .map((media) => media.path)
+            .toList(growable: false),
+      );
     } catch (e) {
       print('Error generating missing thumbnails: $e');
+    } finally {
+      _missingThumbnailScanInProgress = false;
     }
   }
 
@@ -202,12 +237,10 @@ class ThumbnailService extends GetxService {
   Future<void> _processNextRequest() async {
     if (_isProcessing.value || _requestQueue.isEmpty) return;
 
-    final pendingRequests = _requestQueue
-        .where((r) => r.status == ThumbnailRequestStatus.pending)
-        .toList();
-    if (pendingRequests.isEmpty) return;
-
-    final request = pendingRequests.first;
+    final request = _requestQueue.firstWhereOrNull(
+      (item) => item.status == ThumbnailRequestStatus.pending,
+    );
+    if (request == null) return;
     _isProcessing.value = true;
     request.status = ThumbnailRequestStatus.processing;
 
@@ -218,6 +251,12 @@ class ThumbnailService extends GetxService {
         request.videoPath,
         request.outputPath,
       );
+
+      if (_cancelledVideoPaths.contains(request.videoPath)) {
+        request.status = ThumbnailRequestStatus.cancelled;
+        if (thumbnailPath != null) await _deleteFileIfPresent(thumbnailPath);
+        return;
+      }
 
       if (thumbnailPath != null && await File(thumbnailPath).exists()) {
         await _updateMediaWithThumbnail(request.videoPath, thumbnailPath);
@@ -250,14 +289,10 @@ class ThumbnailService extends GetxService {
       }
     } finally {
       _isProcessing.value = false;
-
-      Timer(const Duration(minutes: 5), () {
-        _requestQueue.removeWhere(
-          (r) =>
-              r.status == ThumbnailRequestStatus.completed ||
-              r.status == ThumbnailRequestStatus.failed,
-        );
-      });
+      _requestQueue.remove(request);
+      _activeRequests.remove(request.videoPath);
+      _reservedVideoPaths.remove(request.videoPath);
+      _cancelledVideoPaths.remove(request.videoPath);
     }
   }
 
@@ -268,8 +303,9 @@ class ThumbnailService extends GetxService {
     try {
       // get_thumbnail_video has no desktop implementation, so desktop grabs a
       // frame through media_kit — the same engine that plays the file.
-      if (isDesktop)
+      if (isDesktop) {
         return await _generateThumbnailWithMediaKit(videoPath, outputPath);
+      }
 
       final result = await VideoThumbnail.thumbnailFile(
         video: videoPath,
@@ -279,7 +315,7 @@ class ThumbnailService extends GetxService {
         quality: 85,
       );
 
-      return result?.path;
+      return result.path;
     } catch (e) {
       print('Error generating thumbnail in isolate: $e');
       return null;
@@ -363,32 +399,25 @@ class ThumbnailService extends GetxService {
           .pathEqualTo(videoPath)
           .findFirstSync();
 
-      if (existingMedia != null) {
-        existingMedia.thumbnailPath = thumbnailPath;
-        existingMedia.addedAt ??= DateTime.now();
-        existingMedia.durationMs =
-            _discoveredDurations.remove(videoPath) ?? existingMedia.durationMs;
-        existingMedia.dominantColorValue = await _extractDominantColor(
-          thumbnailPath,
-        );
-        _isar.writeTxnSync(() {
-          _isar.medias.putSync(existingMedia);
-        });
-        print('Updated existing media with thumbnail: $videoPath');
-      } else {
-        final fileName = _fileNameOf(videoPath);
-        final newMedia = Media()
-          ..path = videoPath
-          ..name = fileName
-          ..thumbnailPath = thumbnailPath
-          ..addedAt = DateTime.now()
-          ..durationMs = _discoveredDurations.remove(videoPath) ?? 0
-          ..dominantColorValue = await _extractDominantColor(thumbnailPath);
-        _isar.writeTxnSync(() {
-          _isar.medias.putSync(newMedia);
-        });
-        print('Created new media record with thumbnail: $videoPath');
+      if (existingMedia == null) {
+        // The source was removed while its thumbnail was being generated.
+        // Never resurrect a stale library record from an in-flight request.
+        _discoveredDurations.remove(videoPath);
+        await _deleteFileIfPresent(thumbnailPath);
+        return;
       }
+
+      existingMedia.thumbnailPath = thumbnailPath;
+      existingMedia.addedAt ??= DateTime.now();
+      existingMedia.durationMs =
+          _discoveredDurations.remove(videoPath) ?? existingMedia.durationMs;
+      existingMedia.dominantColorValue = await _extractDominantColor(
+        thumbnailPath,
+      );
+      _isar.writeTxnSync(() {
+        _isar.medias.putSync(existingMedia);
+      });
+      print('Updated existing media with thumbnail: $videoPath');
     } catch (e) {
       print('Error updating media with thumbnail: $e');
       rethrow;
@@ -470,6 +499,58 @@ class ThumbnailService extends GetxService {
 
   bool hasThumbnail(String videoPath) {
     return getThumbnailPath(videoPath) != null;
+  }
+
+  /// Cancels queued work in O(queue + paths) time.
+  void cancelRequestsForPaths(Set<String> videoPaths) {
+    if (videoPaths.isEmpty) return;
+
+    for (final request in _requestQueue) {
+      if (!videoPaths.contains(request.videoPath)) continue;
+      _cancelledThumbnailPaths.add(request.outputPath);
+      if (request.status == ThumbnailRequestStatus.processing) {
+        _cancelledVideoPaths.add(request.videoPath);
+      }
+    }
+
+    _requestQueue.removeWhere(
+      (request) =>
+          request.status == ThumbnailRequestStatus.pending &&
+          videoPaths.contains(request.videoPath),
+    );
+    for (final path in videoPaths) {
+      final active = _activeRequests[path];
+      if (active == null || active.status == ThumbnailRequestStatus.pending) {
+        _activeRequests.remove(path);
+        _reservedVideoPaths.remove(path);
+      }
+      _discoveredDurations.remove(path);
+    }
+  }
+
+  Future<void> deleteArtifactsForMedia(Iterable<Media> removedMedia) async {
+    final items = removedMedia.toList(growable: false);
+    final videoPaths = items.map((item) => item.path).toSet();
+    final thumbnailPaths = items
+        .map((item) => item.thumbnailPath)
+        .whereType<String>()
+        .where((path) => path.isNotEmpty)
+        .followedBy(_cancelledThumbnailPaths)
+        .toSet();
+    cancelRequestsForPaths(videoPaths);
+    for (final path in thumbnailPaths) {
+      await _deleteFileIfPresent(path);
+    }
+    _cancelledThumbnailPaths.removeAll(thumbnailPaths);
+  }
+
+  Future<void> _deleteFileIfPresent(String path) async {
+    try {
+      final file = File(path);
+      if (await file.exists()) await file.delete();
+    } on FileSystemException {
+      // Orphan cleanup can retry files held briefly by another process.
+    }
   }
 
   void clearQueue() {

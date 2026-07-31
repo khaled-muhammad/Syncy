@@ -36,10 +36,6 @@ class _MobileHomeScreen extends GetView<HomeController> {
 
   @override
   Widget build(BuildContext context) {
-    final PageController pageController = PageController(
-      initialPage: controller.activeIndex.value,
-    );
-
     return Obx(
       () => NativePurpleMeshBackground(
         accent: Color(controller.selectedAccentValue.value),
@@ -49,14 +45,7 @@ class _MobileHomeScreen extends GetView<HomeController> {
               backgroundColor: Colors.transparent,
               body: Stack(
                 children: [
-                  Obx(
-                    () => PageView(
-                      controller: pageController,
-                      onPageChanged: (index) =>
-                          controller.activeIndex.value = index,
-                      children: [_buildAudioPage(), _buildVideoPage()],
-                    ),
-                  ),
+                  _buildVideoPage(),
                   Obx(
                     () =>
                         controller.isSyncing.value &&
@@ -78,44 +67,28 @@ class _MobileHomeScreen extends GetView<HomeController> {
                     child: SafeArea(
                       child: Padding(
                         padding: const EdgeInsets.only(bottom: 32),
-                        child: Obx(
-                          () => FloatingBottomBar(
-                            activeIndex: controller.activeIndex.value,
-                            navItems: [
-                              NavItem(
-                                icon: IonIcons.disc,
-                                label: "Audio",
-                                onPressed: () {
-                                  controller.activeIndex.value = 0;
-                                  pageController.jumpToPage(0);
-                                },
+                        child: FloatingBottomBar(
+                          activeIndex: 0,
+                          navItems: [
+                            NavItem(
+                              icon: IonIcons.home,
+                              label: 'Home',
+                              onPressed: () {},
+                            ),
+                            NavItem(
+                              icon: IonIcons.log_in,
+                              label: 'Join',
+                              onPressed: () => showAdaptiveSheet(
+                                const JoinRoomBottomSheet(),
                               ),
-                              NavItem(
-                                icon: IonIcons.home,
-                                label: "Home",
-                                onPressed: () {
-                                  controller.activeIndex.value = 1;
-                                  pageController.jumpToPage(1);
-                                },
-                              ),
-                              NavItem(
-                                icon: IonIcons.log_in,
-                                label: "Join",
-                                onPressed: () {
-                                  controller.activeIndex.value = 1;
-                                  showAdaptiveSheet(
-                                    const JoinRoomBottomSheet(),
-                                  );
-                                },
-                              ),
-                              NavItem(
-                                icon: IonIcons.desktop,
-                                label: "PC",
-                                onPressed: () =>
-                                    Get.to(() => const ConnectPcScreen()),
-                              ),
-                            ],
-                          ),
+                            ),
+                            NavItem(
+                              icon: IonIcons.desktop,
+                              label: 'PC',
+                              onPressed: () =>
+                                  Get.to(() => const ConnectPcScreen()),
+                            ),
+                          ],
                         ),
                       ),
                     ),
@@ -164,29 +137,6 @@ class _MobileHomeScreen extends GetView<HomeController> {
     );
   }
 
-  Widget _buildAudioPage() {
-    return SafeArea(
-      child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(IonIcons.musical_note, size: 80, color: Colors.white),
-            const SizedBox(height: 16),
-            const Text(
-              'Audio feature coming soon!',
-              style: TextStyle(fontSize: 18, color: Colors.white70),
-            ),
-            const SizedBox(height: 12),
-            ElevatedButton(
-              onPressed: () => controller.refreshMediaFiles(),
-              child: const Text('Refresh Media'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildVideoPage() {
     if (!controller.hasPermission.value) {
       return _videoStateWithRecents(
@@ -219,14 +169,21 @@ class _MobileHomeScreen extends GetView<HomeController> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Text(
-                'No media files found',
-                style: TextStyle(fontSize: 18, color: Colors.white),
+              Text(
+                controller.syncErrorMessage.value.isEmpty
+                    ? 'No media files found'
+                    : controller.syncErrorMessage.value,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 18, color: Colors.white),
               ),
               const SizedBox(height: 16),
               ElevatedButton(
                 onPressed: controller.refreshMediaFiles,
-                child: const Text('Refresh'),
+                child: Text(
+                  controller.syncErrorMessage.value.isEmpty
+                      ? 'Refresh'
+                      : 'Try again',
+                ),
               ),
             ],
           ),

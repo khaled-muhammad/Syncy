@@ -1,10 +1,9 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:isar_community/isar.dart';
 import 'package:syncy/models/media.dart';
 import 'package:syncy/services/media_discovery_service.dart';
+import 'package:syncy/services/media_reconciliation_service.dart';
 import 'package:syncy/services/thumbnail_service.dart';
 import 'package:syncy/services/subtitle_discovery_service.dart';
 import 'package:syncy/utils/native_pickers.dart';
@@ -176,20 +175,34 @@ class LibraryController extends GetxController {
     scanStatus.value = 'Scanning ${folder.name}…';
 
     try {
-      final foundPaths = await _discovery.scanDirectory(folder.path);
-      final existingPaths = isar.medias
-          .where()
-          .findAllSync()
-          .map((item) => item.path)
-          .toSet();
-      final newPaths = foundPaths
-          .where((path) => !existingPaths.contains(path))
+      final discovery = await _discovery.scanDirectoryWithResult(folder.path);
+      final existingUnderRoot = _mediaUnder(folder.path);
+      final diff = calculateMediaPathDiff(
+        knownPaths: existingUnderRoot.map((item) => item.path),
+        discoveredPaths: discovery.paths,
+        normalizePath: _normalizePath,
+      );
+      final newPaths = diff.addedPaths;
+      final removedPaths = discovery.isComplete
+          ? diff.removedPaths.map(_normalizePath).toSet()
+          : const <String>{};
+      final removedMedia = existingUnderRoot
+          .where((item) => removedPaths.contains(_normalizePath(item.path)))
           .toList(growable: false);
 
-      if (newPaths.isNotEmpty) {
+      if (newPaths.isNotEmpty || removedMedia.isNotEmpty) {
         scanStatus.value = newPaths.length == 1
             ? 'Adding 1 video…'
-            : 'Adding ${newPaths.length} videos…';
+            : 'Updating ${folder.name}…';
+
+        Set<String> videosWithSubtitles = const {};
+        try {
+          videosWithSubtitles = await findVideoPathsWithMatchingSubtitles(
+            newPaths,
+          );
+        } catch (error, stackTrace) {
+          debugPrint('Subtitle discovery skipped: $error\n$stackTrace');
+        }
 
         final records = newPaths
             .map(
@@ -198,13 +211,24 @@ class LibraryController extends GetxController {
                 ..name = _fileName(path)
                 ..thumbnailPath = ''
                 ..addedAt = DateTime.now()
-                ..hasSubtitles = _hasSiblingSubtitle(path),
+                ..hasSubtitles = videosWithSubtitles.contains(path),
             )
             .toList(growable: false);
 
-        // One transaction for the whole batch — a per-file transaction makes
-        // indexing a large folder dramatically slower.
-        isar.writeTxnSync(() => isar.medias.putAllSync(records));
+        thumbnailService.cancelRequestsForPaths(
+          removedMedia.map((item) => item.path).toSet(),
+        );
+
+        // One atomic transaction for the complete set diff.
+        await isar.writeTxn(() async {
+          if (removedMedia.isNotEmpty) {
+            await isar.medias.deleteAll(
+              removedMedia.map((item) => item.id).toList(growable: false),
+            );
+          }
+          if (records.isNotEmpty) await isar.medias.putAll(records);
+        });
+        await thumbnailService.deleteArtifactsForMedia(removedMedia);
       }
 
       _refreshVisibleMedia();
@@ -214,11 +238,10 @@ class LibraryController extends GetxController {
       }
       await thumbnailService.generateMissingThumbnails();
 
-      scanStatus.value = newPaths.isEmpty
-          ? 'Up to date'
-          : newPaths.length == 1
-          ? '1 video added'
-          : '${newPaths.length} videos added';
+      scanStatus.value = _scanSummary(
+        addedCount: newPaths.length,
+        removedCount: removedMedia.length,
+      );
     } catch (error) {
       scanStatus.value = 'Couldn’t finish scanning';
       Get.snackbar(
@@ -243,23 +266,15 @@ class LibraryController extends GetxController {
   /// thumbnails those records owned.
   Future<void> removeFolder(Folder folder) async {
     final owned = _mediaUnder(folder.path);
-
-    for (final media in owned) {
-      final thumbnailPath = media.thumbnailPath;
-      if (thumbnailPath == null || thumbnailPath.isEmpty) continue;
-      try {
-        final file = File(thumbnailPath);
-        if (await file.exists()) await file.delete();
-      } on FileSystemException {
-        // A thumbnail that cannot be deleted is orphaned, not fatal;
-        // cleanupOrphanedThumbnails() will collect it later.
-      }
-    }
+    thumbnailService.cancelRequestsForPaths(
+      owned.map((item) => item.path).toSet(),
+    );
 
     isar.writeTxnSync(() {
       isar.medias.deleteAllSync(owned.map((m) => m.id).toList());
       isar.folders.deleteSync(folder.id);
     });
+    await thumbnailService.deleteArtifactsForMedia(owned);
 
     roots.removeWhere((item) => item.id == folder.id);
     if (selectedRoot.value?.id == folder.id) {
@@ -339,8 +354,17 @@ class LibraryController extends GetxController {
 
   String _fileName(String path) => path.replaceAll('\\', '/').split('/').last;
 
-  bool _hasSiblingSubtitle(String videoPath) {
-    return hasMatchingSubtitleSync(videoPath);
+  String _scanSummary({required int addedCount, required int removedCount}) {
+    if (addedCount == 0 && removedCount == 0) return 'Up to date';
+    if (addedCount > 0 && removedCount > 0) {
+      return '$addedCount added · $removedCount removed';
+    }
+    if (addedCount > 0) {
+      return addedCount == 1 ? '1 video added' : '$addedCount videos added';
+    }
+    return removedCount == 1
+        ? '1 deleted video removed'
+        : '$removedCount deleted videos removed';
   }
 
   String _directoryName(String path) {

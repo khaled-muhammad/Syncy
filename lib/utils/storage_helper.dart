@@ -37,6 +37,29 @@ class StorageHelper {
     }
   }
 
+  /// Whether a complete discovery result may be used to remove missing media.
+  ///
+  /// Selected/limited access intentionally preserves cached records that the
+  /// operating system merely hid from this scan. Full video, legacy storage,
+  /// or manage-storage access is safe to reconcile.
+  static Future<bool> canReconcileDeletedMedia() async {
+    if (Platform.isAndroid) {
+      final videoStatus = await Permission.videos.status;
+      if (videoStatus.isGranted) return true;
+
+      final storageStatus = await Permission.storage.status;
+      if (storageStatus.isGranted) return true;
+
+      return (await Permission.manageExternalStorage.status).isGranted;
+    }
+
+    if (Platform.isIOS) {
+      return (await Permission.mediaLibrary.status).isGranted;
+    }
+
+    return true;
+  }
+
   static Future<String> getAppDocumentsPath() async {
     final directory = await getApplicationDocumentsDirectory();
     return directory.path;

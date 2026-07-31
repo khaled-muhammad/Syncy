@@ -29,4 +29,33 @@ void main() {
     );
     expect(hasMatchingSubtitleSync(video.path), isTrue);
   });
+
+  test('batch discovery matches videos across shared directories', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'syncy-subtitle-batch-',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+
+    String path(String name) =>
+        '${directory.path}${Platform.pathSeparator}$name';
+    final firstVideo = File(path('First Movie.mp4'));
+    final secondVideo = File(path('Second Movie.mkv'));
+    final thirdVideo = File(path('No Subtitles.webm'));
+    await Future.wait([
+      firstVideo.writeAsBytes(const [0]),
+      secondVideo.writeAsBytes(const [0]),
+      thirdVideo.writeAsBytes(const [0]),
+      File(path('First Movie.en.srt')).writeAsString('subtitle'),
+      File(path('Second Movie.vtt')).writeAsString('subtitle'),
+      File(path('Unrelated.srt')).writeAsString('subtitle'),
+    ]);
+
+    final matches = await findVideoPathsWithMatchingSubtitles([
+      firstVideo.path,
+      secondVideo.path,
+      thirdVideo.path,
+    ]);
+
+    expect(matches, {firstVideo.path, secondVideo.path});
+  });
 }

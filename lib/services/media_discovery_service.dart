@@ -3,6 +3,15 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:syncy/constants/app_constants.dart';
 
+class MediaDiscoveryResult {
+  const MediaDiscoveryResult({required this.paths, required this.isComplete});
+
+  final List<String> paths;
+
+  /// Whether missing paths can safely be treated as deleted.
+  final bool isComplete;
+}
+
 /// Discovers videos through the platform's indexed media database when
 /// possible. This avoids recursively reading every file on every app launch.
 class MediaDiscoveryService {
@@ -11,13 +20,22 @@ class MediaDiscoveryService {
   );
 
   Future<List<String>> discoverVideoPaths(String rootPath) async {
+    return (await discoverVideoPathsWithResult(rootPath)).paths;
+  }
+
+  Future<MediaDiscoveryResult> discoverVideoPathsWithResult(
+    String rootPath,
+  ) async {
     if (Platform.isAndroid) {
       try {
         final paths = await _channel.invokeListMethod<String>('getVideoPaths', {
           'extensions': videoExtensions,
         });
         if (paths != null) {
-          return _normalize(paths);
+          return MediaDiscoveryResult(
+            paths: _normalize(paths),
+            isComplete: true,
+          );
         }
       } on PlatformException {
         // Older/unusual Android devices can reject MediaStore queries. The
@@ -27,7 +45,7 @@ class MediaDiscoveryService {
       }
     }
 
-    return scanDirectory(rootPath);
+    return scanDirectoryWithResult(rootPath);
   }
 
   /// Recursively collects supported video files under [rootPath].
@@ -36,9 +54,12 @@ class MediaDiscoveryService {
   /// index, rather than going through [discoverVideoPaths] — there is no
   /// platform media database to consult and no single device-wide root worth
   /// scanning.
-  Future<List<String>> scanDirectory(String rootPath) => _scanFileSystem(
-    rootPath,
-  );
+  Future<List<String>> scanDirectory(String rootPath) async {
+    return (await scanDirectoryWithResult(rootPath)).paths;
+  }
+
+  Future<MediaDiscoveryResult> scanDirectoryWithResult(String rootPath) =>
+      _scanFileSystem(rootPath);
 
   List<String> _normalize(Iterable<String> paths) {
     final supported = videoExtensions.toSet();
@@ -51,15 +72,22 @@ class MediaDiscoveryService {
     return uniquePaths.toList(growable: false);
   }
 
-  Future<List<String>> _scanFileSystem(String rootPath) async {
-    if (rootPath.isEmpty) return const [];
+  Future<MediaDiscoveryResult> _scanFileSystem(String rootPath) async {
+    if (rootPath.isEmpty) {
+      return const MediaDiscoveryResult(paths: [], isComplete: false);
+    }
 
     final root = Directory(rootPath);
-    if (!await root.exists()) return const [];
+    if (!await root.exists()) {
+      // A disconnected drive and a deleted root are indistinguishable here.
+      // Preserve cached records until the root is available or removed.
+      return const MediaDiscoveryResult(paths: [], isComplete: false);
+    }
 
     final supported = videoExtensions.toSet();
     final paths = <String>[];
     final pendingDirectories = <Directory>[root];
+    var isComplete = true;
 
     while (pendingDirectories.isNotEmpty) {
       final directory = pendingDirectories.removeLast();
@@ -76,11 +104,13 @@ class MediaDiscoveryService {
         }
       } on FileSystemException {
         // Protected directories are expected on modern mobile operating
-        // systems; skipping one should not abort the complete scan.
+        // systems. Additions are safe, but deletions cannot be inferred from
+        // a scan that could not inspect every directory.
+        isComplete = false;
       }
     }
 
-    return paths;
+    return MediaDiscoveryResult(paths: paths, isComplete: isComplete);
   }
 
   String _extensionOf(String path) {

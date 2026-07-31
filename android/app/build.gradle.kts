@@ -76,6 +76,12 @@ android {
     }
 
     buildTypes {
+        debug {
+            // Keep diagnostic builds installable beside a signed release so
+            // testing never clears the user's paired-device state.
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-debug"
+        }
         release {
             // Never fall back to the machine-specific debug key for a distributable build.
             signingConfig = signingConfigs.getByName("release")

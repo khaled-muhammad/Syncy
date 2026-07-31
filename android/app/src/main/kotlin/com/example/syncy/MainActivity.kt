@@ -47,37 +47,22 @@ class MainActivity : FlutterActivity() {
 
     private fun queryVideoPaths(supportedExtensions: Set<String>): List<String> {
         val uri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL)
+            MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
         } else {
-            MediaStore.Files.getContentUri("external")
+            MediaStore.Video.Media.EXTERNAL_CONTENT_URI
         }
         val projection = arrayOf(
             MediaStore.Files.FileColumns.DATA,
             MediaStore.Files.FileColumns.DATE_ADDED,
         )
         val paths = LinkedHashSet<String>()
-        val extensionConditions = supportedExtensions.map {
-            "${MediaStore.Files.FileColumns.DATA} LIKE ?"
-        }
-        val selection = buildString {
-            append("${MediaStore.Files.FileColumns.SIZE} > 0 AND (")
-            append("${MediaStore.Files.FileColumns.MEDIA_TYPE} = ?")
-            if (extensionConditions.isNotEmpty()) {
-                append(" OR ")
-                append(extensionConditions.joinToString(" OR "))
-            }
-            append(")")
-        }
-        val selectionArgs = buildList {
-            add(MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO.toString())
-            supportedExtensions.forEach { add("%.$it") }
-        }.toTypedArray()
+        val selection = "${MediaStore.Files.FileColumns.SIZE} > 0"
 
         contentResolver.query(
             uri,
             projection,
             selection,
-            selectionArgs,
+            null,
             "${MediaStore.Files.FileColumns.DATE_ADDED} DESC",
         )?.use { cursor ->
             val pathColumn = cursor.getColumnIndex(MediaStore.Files.FileColumns.DATA)
@@ -85,13 +70,28 @@ class MainActivity : FlutterActivity() {
                 if (pathColumn < 0 || cursor.isNull(pathColumn)) continue
                 val path = cursor.getString(pathColumn)
                 val extension = path.substringAfterLast('.', "").lowercase(Locale.ROOT)
-                if (supportedExtensions.isEmpty() || extension in supportedExtensions) {
+                if (!shouldSkipPath(path) &&
+                    (supportedExtensions.isEmpty() || extension in supportedExtensions)
+                ) {
                     paths.add(path)
                 }
             }
         }
 
         return paths.toList()
+    }
+
+    private fun shouldSkipPath(path: String): Boolean {
+        val normalized = path.replace('\\', '/').lowercase(Locale.ROOT)
+        return listOf(
+            "/android/data/",
+            "/android/obb/",
+            "/.thumbnails/",
+            "/.cache/",
+            "/.tmp/",
+            "/node_modules/",
+            "/.git/",
+        ).any { normalized.contains(it) }
     }
 
     override fun onDestroy() {

@@ -122,6 +122,114 @@ List<SubtitleTrack> discoverLocalSubtitlesSync(String videoPath) {
 bool hasMatchingSubtitleSync(String videoPath) =>
     discoverLocalSubtitlesSync(videoPath).isNotEmpty;
 
+/// Asynchronously finds videos with matching sidecar subtitles while listing
+/// each parent directory only once.
+///
+/// Android can grant access to individual media files without allowing every
+/// parent directory to be enumerated. Those directories are skipped because
+/// subtitle badges are optional and must never prevent the video library from
+/// loading.
+Future<Set<String>> findVideoPathsWithMatchingSubtitles(
+  List<String> videoPaths,
+) async {
+  final videosByDirectory = _groupVideoCandidatesByDirectory(videoPaths);
+  final matches = <String>{};
+
+  for (final entry in videosByDirectory.entries) {
+    final subtitleStems = <String>[];
+    try {
+      await for (final entity in Directory(
+        entry.key,
+      ).list(followLinks: false)) {
+        if (entity is! File) continue;
+        final fileName = entity.path.replaceAll('\\', '/').split('/').last;
+        if (!_subtitleExtensions.contains(_extension(fileName))) continue;
+        subtitleStems.add(_stem(fileName));
+      }
+    } on FileSystemException {
+      continue;
+    }
+
+    _addMatchingVideoPaths(matches, entry.value, subtitleStems);
+    await Future<void>.delayed(Duration.zero);
+  }
+  return matches;
+}
+
+/// Finds every video that has a matching sidecar subtitle while listing each
+/// parent directory only once.
+///
+/// A mobile library can contain thousands of videos in the same camera or
+/// messaging folder. Calling [hasMatchingSubtitleSync] for each video turns
+/// that into an O(videos * directory entries) scan on the caller's isolate.
+/// This batched form keeps the work linear and is safe to run in a background
+/// isolate.
+Set<String> findVideoPathsWithMatchingSubtitlesSync(List<String> videoPaths) {
+  final videosByDirectory = _groupVideoCandidatesByDirectory(videoPaths);
+  final matches = <String>{};
+
+  for (final entry in videosByDirectory.entries) {
+    final directory = Directory(entry.key);
+    if (!directory.existsSync()) continue;
+
+    final subtitleStems = <String>[];
+    try {
+      for (final entity in directory.listSync(followLinks: false)) {
+        if (entity is! File) continue;
+        final fileName = entity.path.replaceAll('\\', '/').split('/').last;
+        if (!_subtitleExtensions.contains(_extension(fileName))) continue;
+        subtitleStems.add(_stem(fileName));
+      }
+    } on FileSystemException {
+      continue;
+    }
+
+    _addMatchingVideoPaths(matches, entry.value, subtitleStems);
+  }
+  return matches;
+}
+
+Map<String, List<_LocalVideoCandidate>> _groupVideoCandidatesByDirectory(
+  List<String> videoPaths,
+) {
+  final videosByDirectory = <String, List<_LocalVideoCandidate>>{};
+  for (final videoPath in videoPaths) {
+    final normalized = videoPath.replaceAll('\\', '/');
+    final slash = normalized.lastIndexOf('/');
+    final directoryPath = slash < 0 ? '.' : normalized.substring(0, slash);
+    final fileName = slash < 0 ? normalized : normalized.substring(slash + 1);
+    final stem = _stem(fileName);
+    if (stem.isEmpty) continue;
+    videosByDirectory
+        .putIfAbsent(directoryPath, () => <_LocalVideoCandidate>[])
+        .add(_LocalVideoCandidate(videoPath, stem));
+  }
+
+  return videosByDirectory;
+}
+
+void _addMatchingVideoPaths(
+  Set<String> matches,
+  List<_LocalVideoCandidate> videos,
+  List<String> subtitleStems,
+) {
+  if (subtitleStems.isEmpty) return;
+  for (final video in videos) {
+    if (subtitleStems.any(
+      (subtitleStem) => _matchesVideoStem(video.stem, subtitleStem),
+    )) {
+      matches.add(video.path);
+    }
+  }
+}
+
+class _LocalVideoCandidate {
+  const _LocalVideoCandidate(this.path, this.stem);
+
+  final String path;
+  final String stem;
+}
+
 bool _matchesVideoStem(String videoStem, String subtitleStem) {
   final video = videoStem.toLowerCase();
   final subtitle = subtitleStem.toLowerCase();
