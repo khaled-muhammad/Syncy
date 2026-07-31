@@ -9,6 +9,12 @@ void main() {
       'ABCD2345',
     );
     expect(
+      normalizeRoomReference(
+        'Join me: https://syncy-backend.mywire.org/join/ABCD-2345',
+      ),
+      'ABCD2345',
+    );
+    expect(
       roomReferenceFromUri(Uri.parse('syncy://join/ABCD2345')),
       'ABCD2345',
     );

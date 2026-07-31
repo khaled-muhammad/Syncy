@@ -37,7 +37,7 @@ newest play, pause, or seek command.
 - Android lifecycle reconciliation for status shade, app switching, and split screen
 - Friends and Couple room modes
 - Participant presence and durable room membership
-- Shareable `syncy://` room links and readable, copyable join codes
+- Shareable HTTPS room links that hand off to `syncy://`, plus readable join codes
 - Recent rooms with one-tap rejoin on Android and Windows
 - Host moderation with room locking, participant removal, and seek permissions
 - Fullscreen playback, desktop keyboard controls, and double-tap seeking

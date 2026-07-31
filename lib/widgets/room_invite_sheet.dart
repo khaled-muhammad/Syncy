@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:syncy/constants/app_constants.dart';
 import 'package:syncy/models/room.dart';
 import 'package:syncy/utils/platform_utils.dart';
 
@@ -12,7 +13,7 @@ class RoomInviteSheet extends StatelessWidget {
 
   const RoomInviteSheet({super.key, required this.room});
 
-  String get _inviteLink => 'syncy://join/${room.joinCode}';
+  String get _inviteLink => AppConstants.roomInviteUrl(room.joinCode);
 
   String get _inviteMessage =>
       'Join “${room.name}” on Syncy.\n'

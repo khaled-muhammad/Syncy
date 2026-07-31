@@ -45,6 +45,9 @@ class AppConstants {
 
   static const String wssBaseUrl = 'wss://$baseDomain/ws';
 
+  static String roomInviteUrl(String roomReference) =>
+      '$baseUrl/join/${Uri.encodeComponent(roomReference)}';
+
   // API Endpoints
   static const String loginEndpoint = '$apiBaseUrl/auth/login';
   static const String registerEndpoint = '$apiBaseUrl/auth/register';

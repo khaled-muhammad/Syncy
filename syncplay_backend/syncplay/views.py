@@ -1,4 +1,6 @@
 from django.shortcuts import render
+from django.http import Http404
+from django.views.decorators.http import require_GET
 from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
@@ -15,6 +17,25 @@ from .serializers import (
 )
 
 logger = logging.getLogger('syncplay')
+
+
+@require_GET
+def room_invite(request, room_reference):
+    """Open an HTTPS room invite and hand it to the installed Syncy app."""
+    room = Room.resolve_reference(room_reference)
+    if room is None:
+        raise Http404('Room invite not found')
+
+    response = render(
+        request,
+        'syncplay/room_invite.html',
+        {
+            'room': room,
+            'deep_link': f'syncy://join/{room.join_code}',
+        },
+    )
+    response['Cache-Control'] = 'no-store'
+    return response
 
 @api_view(['POST'])
 def create_room(request):

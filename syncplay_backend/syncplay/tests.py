@@ -305,6 +305,19 @@ class ReliableWebSocketTests(TransactionTestCase):
         self.assertEqual(response.json()['room']['join_code'], self.room.join_code)
         self.assertEqual(response.json()['room']['id'], str(self.room.id))
 
+    def test_https_room_invite_redirects_to_canonical_syncy_link(self):
+        response = self.client.get(f'/join/{self.room.display_join_code}')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Cache-Control'], 'no-store')
+        self.assertContains(response, f'syncy://join/{self.room.join_code}')
+        self.assertContains(response, self.room.name)
+
+    def test_unknown_https_room_invite_returns_not_found(self):
+        response = self.client.get('/join/ZZZZ-ZZZZ')
+
+        self.assertEqual(response.status_code, 404)
+
     def test_join_room_keeps_accepting_legacy_uuid(self):
         response = self.client.post(
             '/api/rooms/join/',

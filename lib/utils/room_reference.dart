@@ -3,7 +3,7 @@ final _uuidPattern = RegExp(
 );
 final _joinCodePattern = RegExp(r'^[2-9A-HJ-NP-Z]{8}$');
 final _inviteLinkPattern = RegExp(
-  r'syncy://join/([0-9A-Z-]+)',
+  r'(?:syncy://join/|https://syncy-backend\.mywire\.org/join/)([0-9A-Z-]+)',
   caseSensitive: false,
 );
 

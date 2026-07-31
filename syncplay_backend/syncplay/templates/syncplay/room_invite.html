@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="refresh" content="0; url={{ deep_link }}">
+    <meta property="og:title" content="Join {{ room.name }} on Syncy">
+    <meta property="og:description" content="Open this invite to watch together in Syncy.">
+    <title>Join {{ room.name }} on Syncy</title>
+    <style>
+      :root { color-scheme: dark; font-family: Inter, system-ui, sans-serif; }
+      body {
+        align-items: center;
+        background: radial-gradient(circle at top, #6f28c9, #180d2a 55%);
+        display: flex;
+        justify-content: center;
+        margin: 0;
+        min-height: 100vh;
+      }
+      main {
+        background: rgba(255, 255, 255, .08);
+        border: 1px solid rgba(255, 255, 255, .16);
+        border-radius: 24px;
+        box-shadow: 0 24px 80px rgba(0, 0, 0, .35);
+        max-width: 420px;
+        padding: 32px;
+        text-align: center;
+      }
+      h1 { margin: 0 0 10px; }
+      p { color: rgba(255, 255, 255, .72); line-height: 1.5; }
+      a {
+        background: linear-gradient(135deg, #7137e8, #ca36e8);
+        border-radius: 999px;
+        color: white;
+        display: inline-block;
+        font-weight: 700;
+        margin-top: 12px;
+        padding: 14px 22px;
+        text-decoration: none;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Opening Syncy…</h1>
+      <p>Join “{{ room.name }}” with room code {{ room.display_join_code }}.</p>
+      <a href="{{ deep_link }}">Open Syncy</a>
+    </main>
+    <script>
+      window.location.replace('{{ deep_link|escapejs }}');
+    </script>
+  </body>
+</html>

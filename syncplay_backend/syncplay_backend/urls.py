@@ -15,8 +15,9 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
-from django.urls import path, include
+from django.urls import path, include, re_path
 from django.http import JsonResponse
+from syncplay import views as syncplay_views
 
 def api_root(request):
     """API root endpoint"""
@@ -33,5 +34,10 @@ def api_root(request):
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include('syncplay.urls')),
+    re_path(
+        r'^join/(?P<room_reference>[^/]+)/?$',
+        syncplay_views.room_invite,
+        name='room_invite',
+    ),
     path('', api_root, name='api_root'),
 ]
