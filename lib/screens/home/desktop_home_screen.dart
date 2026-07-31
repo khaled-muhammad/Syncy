@@ -15,6 +15,7 @@ import 'package:syncy/utils/platform_utils.dart';
 import 'package:syncy/widgets/adaptive_sheet.dart';
 import 'package:syncy/widgets/media_card.dart';
 import 'package:syncy/widgets/native_purple_mesh_background.dart';
+import 'package:syncy/widgets/recent_rooms.dart';
 
 /// The desktop library: chosen folders on the left, their contents on the
 /// right.
@@ -71,17 +72,21 @@ class _LibrarySidebar extends StatelessWidget {
               const _SidebarBrand(),
               Expanded(
                 child: Obx(() {
-                  if (controller.roots.isEmpty) {
-                    return const _SidebarEmptyHint();
-                  }
                   return ListView(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 10,
                       vertical: 4,
                     ),
                     children: [
-                      for (final folder in controller.roots)
-                        _RootFolderTile(controller: controller, folder: folder),
+                      const RecentRoomsView(compact: true),
+                      if (controller.roots.isEmpty)
+                        const _SidebarEmptyHint()
+                      else
+                        for (final folder in controller.roots)
+                          _RootFolderTile(
+                            controller: controller,
+                            folder: folder,
+                          ),
                     ],
                   );
                 }),

@@ -40,15 +40,47 @@ jobs:
       - name: Run tests
         run: flutter test
 
-      - name: Build universal APK
+      - name: Restore and validate Android release keystore
+        if: github.event_name != 'pull_request'
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_SIGNING_CERT_SHA256: ${{ vars.ANDROID_SIGNING_CERT_SHA256 }}
+        run: bash .github/scripts/prepare_android_signing.sh
+
+      - name: Build signed universal APK
+        if: github.event_name != 'pull_request'
         run: flutter build apk --release
 
-      - name: Upload Android artifact
+      - name: Verify Android APK signature
+        if: github.event_name != 'pull_request'
+        run: bash .github/scripts/verify_android_signing.sh build/app/outputs/flutter-apk/app-release.apk
+
+      - name: Upload signed Android artifact
+        if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@v4
         with:
           name: syncy-android-apk
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
+
+      - name: Build debug APK for pull requests
+        if: github.event_name == 'pull_request'
+        run: flutter build apk --debug
+
+      - name: Upload pull request debug artifact
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: syncy-android-debug-apk
+          path: build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error
+
+      - name: Remove Android release keystore
+        if: always()
+        run: rm -f "$RUNNER_TEMP/syncy-release.jks"
 
   windows:
     name: Build Windows App

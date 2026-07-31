@@ -6,6 +6,7 @@ import 'package:isar_community/isar.dart';
 import 'package:syncy/models/media.dart';
 import 'package:syncy/services/media_discovery_service.dart';
 import 'package:syncy/services/thumbnail_service.dart';
+import 'package:syncy/services/subtitle_discovery_service.dart';
 import 'package:syncy/utils/native_pickers.dart';
 
 /// A directory inside an indexed root, derived from the paths of the media
@@ -339,10 +340,7 @@ class LibraryController extends GetxController {
   String _fileName(String path) => path.replaceAll('\\', '/').split('/').last;
 
   bool _hasSiblingSubtitle(String videoPath) {
-    final separator = videoPath.lastIndexOf(RegExp(r'[/\\]'));
-    final dot = videoPath.lastIndexOf('.');
-    final base = dot > separator ? videoPath.substring(0, dot) : videoPath;
-    return File('$base.srt').existsSync() || File('$base.vtt').existsSync();
+    return hasMatchingSubtitleSync(videoPath);
   }
 
   String _directoryName(String path) {

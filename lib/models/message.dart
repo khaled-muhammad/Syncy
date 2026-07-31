@@ -17,6 +17,9 @@ enum MessageType {
   typing,
   countdown,
   rating,
+  roomSettings,
+  kickParticipant,
+  participantRemoved,
   ack,
 }
 
@@ -40,7 +43,16 @@ class Message {
 
   Map<String, dynamic> toJson() {
     return {
-      'type': type.name,
+      'type': switch (type) {
+        MessageType.videoChanged => 'video_changed',
+        MessageType.roomUpdate => 'room_update',
+        MessageType.userJoined => 'user_joined',
+        MessageType.userLeft => 'user_left',
+        MessageType.roomSettings => 'room_settings',
+        MessageType.kickParticipant => 'kick_participant',
+        MessageType.participantRemoved => 'participant_removed',
+        _ => type.name,
+      },
       'roomId': roomId,
       'userId': userId,
       'data': data,
@@ -65,6 +77,12 @@ class Message {
         break;
       case 'video_changed':
         messageType = MessageType.videoChanged;
+        break;
+      case 'room_settings':
+        messageType = MessageType.roomSettings;
+        break;
+      case 'participant_removed':
+        messageType = MessageType.participantRemoved;
         break;
       default:
         messageType = MessageType.values.firstWhere(
@@ -244,6 +262,40 @@ class Message {
       roomId: roomId,
       userId: userId,
       data: {'rating': rating},
+    );
+  }
+
+  factory Message.roomSettings({
+    required String roomId,
+    required String userId,
+    bool? isLocked,
+    String? seekPermission,
+    String? participantId,
+    bool? canSeek,
+  }) {
+    return Message(
+      type: MessageType.roomSettings,
+      roomId: roomId,
+      userId: userId,
+      data: {
+        if (isLocked != null) 'isLocked': isLocked,
+        if (seekPermission != null) 'seekPermission': seekPermission,
+        if (participantId != null) 'participantId': participantId,
+        if (canSeek != null) 'canSeek': canSeek,
+      },
+    );
+  }
+
+  factory Message.kickParticipant({
+    required String roomId,
+    required String userId,
+    required String participantId,
+  }) {
+    return Message(
+      type: MessageType.kickParticipant,
+      roomId: roomId,
+      userId: userId,
+      data: {'userId': participantId},
     );
   }
 }

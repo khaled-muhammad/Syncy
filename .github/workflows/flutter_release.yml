@@ -33,10 +33,27 @@ jobs:
       - name: Resolve dependencies
         run: flutter pub get
 
+      - name: Restore and validate Android release keystore
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_SIGNING_CERT_SHA256: ${{ vars.ANDROID_SIGNING_CERT_SHA256 }}
+        run: bash .github/scripts/prepare_android_signing.sh
+
       - name: Build Android APKs
         run: |
           flutter build apk --release
           flutter build apk --release --split-per-abi
+
+      - name: Verify Android APK signatures
+        run: |
+          bash .github/scripts/verify_android_signing.sh \
+            build/app/outputs/flutter-apk/app-release.apk \
+            build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk \
+            build/app/outputs/flutter-apk/app-arm64-v8a-release.apk \
+            build/app/outputs/flutter-apk/app-x86_64-release.apk
 
       - name: Prepare Android assets
         run: |
@@ -52,6 +69,10 @@ jobs:
           name: android-release
           path: release/*
           if-no-files-found: error
+
+      - name: Remove Android release keystore
+        if: always()
+        run: rm -f "$RUNNER_TEMP/syncy-release.jks"
 
   windows:
     name: Build Windows release

@@ -9,6 +9,7 @@ class RemoteMedia {
     this.folder,
     this.sizeBytes,
     this.hasThumbnail = false,
+    this.hasSubtitles = false,
   });
 
   /// The host's Isar id for this media, used to build stream/thumbnail URLs.
@@ -17,6 +18,7 @@ class RemoteMedia {
   final String? folder;
   final int? sizeBytes;
   final bool hasThumbnail;
+  final bool hasSubtitles;
 
   factory RemoteMedia.fromJson(Map<String, dynamic> json) {
     return RemoteMedia(
@@ -25,6 +27,7 @@ class RemoteMedia {
       folder: json['folder']?.toString(),
       sizeBytes: (json['sizeBytes'] as num?)?.toInt(),
       hasThumbnail: json['hasThumbnail'] == true,
+      hasSubtitles: json['hasSubtitles'] == true,
     );
   }
 }

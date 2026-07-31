@@ -11,6 +11,7 @@
 .svn/
 .swiftpm/
 migrate_working_dir/
+/.claude/
 
 # IntelliJ related
 *.iml
@@ -44,6 +45,11 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Android release signing material must only live in a password manager/CI secrets
+*.jks
+*.keystore
+/android/key.properties
 
 # Local Netlify folder
 .netlify

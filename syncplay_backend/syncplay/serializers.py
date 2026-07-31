@@ -5,7 +5,7 @@ import uuid
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ['id', 'name', 'is_host', 'is_online', 'joined_at']
+        fields = ['id', 'name', 'is_host', 'can_seek', 'is_online', 'joined_at']
         read_only_fields = ['id', 'joined_at']
 
 class RoomSerializer(serializers.ModelSerializer):
@@ -17,12 +17,13 @@ class RoomSerializer(serializers.ModelSerializer):
     class Meta:
         model = Room
         fields = [
-            'id', 'name', 'room_mode', 'host_id', 'current_video_url',
+            'id', 'join_code', 'name', 'room_mode', 'is_locked',
+            'seek_permission', 'host_id', 'current_video_url',
             'current_video_title', 'current_position', 'position_ms',
             'is_playing', 'playback_revision', 'playback_updated_at',
             'created_at', 'users', 'user_count'
         ]
-        read_only_fields = ['id', 'created_at']
+        read_only_fields = ['id', 'join_code', 'created_at']
 
     def get_position_ms(self, room):
         return round(room.current_position.total_seconds() * 1000)
@@ -46,7 +47,9 @@ class CreateRoomSerializer(serializers.Serializer):
         return value.strip()
 
 class JoinRoomSerializer(serializers.Serializer):
-    room_id = serializers.UUIDField()
+    # Kept as room_id for backwards-compatible clients, but accepts either the
+    # original UUID or the new eight-character join code.
+    room_id = serializers.CharField(max_length=64)
     user_name = serializers.CharField(max_length=50)
     
     def validate_user_name(self, value):
@@ -55,11 +58,10 @@ class JoinRoomSerializer(serializers.Serializer):
         return value.strip()
     
     def validate_room_id(self, value):
-        try:
-            room = Room.objects.get(id=value)
-        except Room.DoesNotExist:
+        room = Room.resolve_reference(value)
+        if room is None:
             raise serializers.ValidationError("Room not found.")
-        return value
+        return room
 
 class MessageSerializer(serializers.ModelSerializer):
     class Meta:

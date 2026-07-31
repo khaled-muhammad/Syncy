@@ -58,6 +58,8 @@ class ReliableSyncPlayConsumer(AsyncWebsocketConsumer):
                 'typing': self.handle_typing,
                 'countdown': self.handle_countdown,
                 'rating': self.handle_rating,
+                'room_settings': self.handle_room_settings,
+                'kick_participant': self.handle_kick_participant,
                 'leave': self.send_ack,
             }
             handler = handlers.get(kind)
@@ -99,6 +101,11 @@ class ReliableSyncPlayConsumer(AsyncWebsocketConsumer):
 
     async def handle_playback(self, data):
         action = data['type']
+        if action == 'seek' and not await self.can_seek():
+            await self.send_error('The host has not allowed you to seek')
+            await self.send_room_state()
+            await self.send_ack(data)
+            return
         position_ms = self.parse_position_ms(data.get('data') or {})
         state, applied = await self.commit_playback(action, position_ms, data)
         if not applied:
@@ -228,6 +235,51 @@ class ReliableSyncPlayConsumer(AsyncWebsocketConsumer):
                 'rating': raw_rating,
                 'user_id': self.user_id,
                 'user_name': self.user.name,
+            },
+        )
+        await self.send_ack(data)
+
+    async def handle_room_settings(self, data):
+        if not self.user.is_host:
+            await self.send_error('Only the host can change room permissions')
+            await self.send_ack(data)
+            return
+        payload = data.get('data') or {}
+        state = await self.update_room_settings(payload)
+        await self.channel_layer.group_send(
+            self.room_group_name,
+            {'type': 'room_state_event', 'state': state},
+        )
+        await self.send_ack(data)
+
+    async def handle_kick_participant(self, data):
+        if not self.user.is_host:
+            await self.send_error('Only the host can remove participants')
+            await self.send_ack(data)
+            return
+        target_id = str((data.get('data') or {}).get('userId') or '')
+        try:
+            target_uuid = uuid.UUID(target_id)
+        except ValueError:
+            raise ValueError('Invalid participant ID')
+        removed = await self.remove_participant(target_uuid)
+        if removed is None:
+            await self.send_error('Participant not found or cannot be removed')
+            await self.send_ack(data)
+            return
+        await self.channel_layer.group_send(
+            self.room_group_name,
+            {
+                'type': 'participant_removed_event',
+                'user_id': str(removed['id']),
+                'user_name': removed['name'],
+            },
+        )
+        await self.channel_layer.group_send(
+            self.room_group_name,
+            {
+                'type': 'room_state_event',
+                'state': await self.room_state(),
             },
         )
         await self.send_ack(data)
@@ -371,6 +423,23 @@ class ReliableSyncPlayConsumer(AsyncWebsocketConsumer):
     async def media_changed_event(self, event):
         await self.send_json({'type': 'video_changed', 'data': event['state']})
 
+    async def room_state_event(self, event):
+        await self.send_json({'type': 'room_update', 'data': event['state']})
+
+    async def participant_removed_event(self, event):
+        await self.send_json(
+            {
+                'type': 'participant_removed',
+                'data': {
+                    'id': event['user_id'],
+                    'userId': event['user_id'],
+                    'name': event['user_name'],
+                },
+            }
+        )
+        if str(event['user_id']) == str(self.user_id):
+            await self.close(code=4003)
+
     @database_sync_to_async
     def join_user(self, user_id, name):
         try:
@@ -425,6 +494,68 @@ class ReliableSyncPlayConsumer(AsyncWebsocketConsumer):
             last_activity=timezone.now()
         )
         User.objects.filter(id=self.user_id).update(last_seen=timezone.now())
+
+    @database_sync_to_async
+    def can_seek(self):
+        room = Room.objects.get(id=self.room.id)
+        user = User.objects.get(id=self.user.id, room=room)
+        return (
+            user.is_host
+            or room.seek_permission == 'everyone'
+            or (room.seek_permission == 'selected' and user.can_seek)
+        )
+
+    @database_sync_to_async
+    def update_room_settings(self, payload):
+        with transaction.atomic():
+            room = Room.objects.select_for_update().get(id=self.room.id)
+            changed_fields = []
+
+            if 'isLocked' in payload:
+                room.is_locked = bool(payload['isLocked'])
+                changed_fields.append('is_locked')
+
+            permission = payload.get('seekPermission')
+            if permission is not None:
+                valid_permissions = {choice[0] for choice in Room.SEEK_PERMISSIONS}
+                if permission not in valid_permissions:
+                    raise ValueError('Invalid seek permission')
+                room.seek_permission = permission
+                changed_fields.append('seek_permission')
+
+            participant_id = payload.get('participantId')
+            if participant_id is not None:
+                participant = User.objects.get(
+                    id=uuid.UUID(str(participant_id)),
+                    room=room,
+                    is_host=False,
+                )
+                participant.can_seek = bool(payload.get('canSeek'))
+                participant.save(update_fields=['can_seek', 'last_seen'])
+
+            if changed_fields:
+                changed_fields.append('updated_at')
+                room.save(update_fields=changed_fields)
+            self.room = room
+            return room.to_dict()
+
+    @database_sync_to_async
+    def remove_participant(self, target_id):
+        with transaction.atomic():
+            participant = User.objects.filter(
+                id=target_id,
+                room=self.room,
+                is_host=False,
+            ).first()
+            if participant is None:
+                return None
+            result = {'id': participant.id, 'name': participant.name}
+            RoomSession.objects.filter(
+                room=self.room,
+                user_id=participant.id,
+            ).delete()
+            participant.delete()
+            return result
 
     @database_sync_to_async
     def commit_playback(self, action, position_ms, envelope):

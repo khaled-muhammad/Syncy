@@ -3,10 +3,15 @@ from .models import Room, User, Message, RoomSession
 
 @admin.register(Room)
 class RoomAdmin(admin.ModelAdmin):
-    list_display = ['name', 'id', 'host_id', 'user_count', 'is_playing', 'created_at']
-    list_filter = ['is_playing', 'created_at']
-    search_fields = ['name', 'id', 'host_id']
-    readonly_fields = ['id', 'created_at', 'updated_at']
+    list_display = [
+        'name', 'join_code', 'id', 'host_id', 'user_count', 'is_locked',
+        'seek_permission', 'is_playing', 'created_at',
+    ]
+    list_filter = [
+        'is_locked', 'seek_permission', 'is_playing', 'created_at',
+    ]
+    search_fields = ['name', 'join_code', 'id', 'host_id']
+    readonly_fields = ['id', 'join_code', 'created_at', 'updated_at']
     
     def user_count(self, obj):
         return obj.user_count
@@ -14,8 +19,10 @@ class RoomAdmin(admin.ModelAdmin):
 
 @admin.register(User)
 class UserAdmin(admin.ModelAdmin):
-    list_display = ['name', 'room', 'is_host', 'is_online', 'joined_at']
-    list_filter = ['is_host', 'is_online', 'joined_at']
+    list_display = [
+        'name', 'room', 'is_host', 'can_seek', 'is_online', 'joined_at',
+    ]
+    list_filter = ['is_host', 'can_seek', 'is_online', 'joined_at']
     search_fields = ['name', 'room__name']
     readonly_fields = ['id', 'joined_at']
 

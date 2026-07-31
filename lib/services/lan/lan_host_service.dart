@@ -11,6 +11,7 @@ import 'package:syncy/constants/app_constants.dart';
 import 'package:syncy/models/media.dart';
 import 'package:syncy/services/lan/lan_discovery.dart';
 import 'package:syncy/services/lan/pairing_store.dart';
+import 'package:syncy/services/subtitle_discovery_service.dart';
 
 /// Runs the desktop's LAN media host: an authenticated HTTP server that lists
 /// the indexed library and streams files (with HTTP range support) to paired
@@ -89,6 +90,8 @@ class LanHostService extends GetxService {
     ..post('/stream-token', _streamToken)
     ..get('/library', _library)
     ..get('/thumb/<id>', _thumb)
+    ..get('/media/<id>/subtitles', _subtitles)
+    ..get('/media/<id>/subtitles/<index>', _subtitle)
     ..get('/media/<id>', _media);
 
   /// Regenerates the visible pairing code (e.g. user taps "new code").
@@ -182,8 +185,8 @@ class LanHostService extends GetxService {
         'name': m.name,
         'folder': _folderOf(m.path),
         'sizeBytes': size,
-        'hasThumbnail':
-            m.thumbnailPath != null && m.thumbnailPath!.isNotEmpty,
+        'hasThumbnail': m.thumbnailPath != null && m.thumbnailPath!.isNotEmpty,
+        'hasSubtitles': hasMatchingSubtitleSync(m.path),
       };
     }).toList();
     return _json({'media': items});
@@ -201,6 +204,42 @@ class LanHostService extends GetxService {
     return Response.ok(
       file.openRead(),
       headers: {'content-type': 'image/jpeg'},
+    );
+  }
+
+  Response _subtitles(Request request, String id) {
+    final mediaId = int.tryParse(id);
+    if (mediaId == null) return Response.notFound('bad id');
+    if (!_streamAuthValid(request, mediaId)) return _unauthorized();
+    final media = _isar.medias.getSync(mediaId);
+    if (media == null) return Response.notFound('no media');
+    final tracks = discoverLocalSubtitlesSync(media.path);
+    return _json({
+      'subtitles': [
+        for (var index = 0; index < tracks.length; index++)
+          {...tracks[index].toJson(), 'source': '', 'index': index},
+      ],
+    });
+  }
+
+  Future<Response> _subtitle(Request request, String id, String index) async {
+    final mediaId = int.tryParse(id);
+    final subtitleIndex = int.tryParse(index);
+    if (mediaId == null || subtitleIndex == null) {
+      return Response.notFound('bad subtitle');
+    }
+    if (!_streamAuthValid(request, mediaId)) return _unauthorized();
+    final media = _isar.medias.getSync(mediaId);
+    if (media == null) return Response.notFound('no media');
+    final tracks = discoverLocalSubtitlesSync(media.path);
+    if (subtitleIndex < 0 || subtitleIndex >= tracks.length) {
+      return Response.notFound('no subtitle');
+    }
+    final file = File(tracks[subtitleIndex].source);
+    if (!file.existsSync()) return Response.notFound('no subtitle');
+    return Response.ok(
+      file.openRead(),
+      headers: {'content-type': _contentTypeFor(file.path)},
     );
   }
 
@@ -305,6 +344,10 @@ class LanHostService extends GetxService {
         return 'video/x-msvideo';
       case 'ts':
         return 'video/mp2t';
+      case 'srt':
+        return 'application/x-subrip; charset=utf-8';
+      case 'vtt':
+        return 'text/vtt; charset=utf-8';
       default:
         return 'application/octet-stream';
     }

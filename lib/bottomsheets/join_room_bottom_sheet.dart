@@ -7,10 +7,13 @@ import 'package:syncy/controllers/room_controller.dart';
 import 'package:syncy/models/user.dart';
 import 'package:syncy/routes/app_routes.dart';
 import 'package:syncy/utils/platform_utils.dart';
+import 'package:syncy/utils/room_reference.dart';
 import 'package:syncy/widgets/modern_input.dart';
 
 class JoinRoomBottomSheet extends StatefulWidget {
-  const JoinRoomBottomSheet({super.key});
+  final String? initialRoomReference;
+
+  const JoinRoomBottomSheet({super.key, this.initialRoomReference});
 
   @override
   State<JoinRoomBottomSheet> createState() => _JoinRoomBottomSheetState();
@@ -38,15 +41,25 @@ class _JoinRoomBottomSheetState extends State<JoinRoomBottomSheet> {
     }
 
     _nameController.text = user.name;
+    _roomIDController.text = widget.initialRoomReference ?? '';
   }
 
   Future<void> _joinRoom() async {
     FocusManager.instance.primaryFocus?.unfocus();
     setState(() => _isJoining = true);
 
-    final joined = await Get.find<RoomController>().joinRoom(
-      _roomIDController.text.trim(),
-    );
+    final reference = normalizeRoomReference(_roomIDController.text);
+    if (reference == null) {
+      setState(() => _isJoining = false);
+      Get.snackbar(
+        'Invalid room code',
+        'Enter an eight-character code, invite link, or legacy room ID.',
+        snackPosition: SnackPosition.TOP,
+      );
+      return;
+    }
+
+    final joined = await Get.find<RoomController>().joinRoom(reference);
     if (!mounted) return;
 
     if (!joined) {
@@ -108,7 +121,7 @@ class _JoinRoomBottomSheetState extends State<JoinRoomBottomSheet> {
                 ModernInput(
                   controller: _roomIDController,
                   icon: Icons.door_front_door_rounded,
-                  hintText: "Enter room ID here",
+                  hintText: "Room code or invite link",
                   onChanged: (newRoomName) {
                     setState(() {});
                   },

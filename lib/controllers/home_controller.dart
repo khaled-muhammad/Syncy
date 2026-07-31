@@ -8,6 +8,7 @@ import 'package:flutter_video_info/flutter_video_info.dart';
 import 'package:syncy/models/media.dart';
 import 'package:syncy/services/media_discovery_service.dart';
 import 'package:syncy/services/thumbnail_service.dart';
+import 'package:syncy/services/subtitle_discovery_service.dart';
 import 'package:syncy/utils/files.dart';
 import 'package:syncy/utils/platform_utils.dart';
 import 'package:syncy/utils/storage_helper.dart';
@@ -186,10 +187,7 @@ class HomeController extends GetxController with WidgetsBindingObserver {
   }
 
   bool _hasSiblingSubtitle(String videoPath) {
-    final separator = videoPath.lastIndexOf(RegExp(r'[/\\]'));
-    final dot = videoPath.lastIndexOf('.');
-    final base = dot > separator ? videoPath.substring(0, dot) : videoPath;
-    return File('$base.srt').existsSync() || File('$base.vtt').existsSync();
+    return hasMatchingSubtitleSync(videoPath);
   }
 
   Future<void> refreshMediaFiles() async {

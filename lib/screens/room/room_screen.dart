@@ -1,10 +1,8 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:ui';
 
 import 'package:panara_dialogs/panara_dialogs.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:icons_plus/icons_plus.dart';
 import 'package:syncy/controllers/home_controller.dart';
@@ -17,6 +15,8 @@ import 'package:syncy/widgets/enhanced_chat_panel.dart';
 import 'package:syncy/widgets/custom_video_player.dart';
 import 'package:syncy/widgets/reliable_reaction_overlay.dart';
 import 'package:syncy/widgets/native_purple_mesh_background.dart';
+import 'package:syncy/widgets/room_invite_sheet.dart';
+import 'package:syncy/widgets/room_participants_sheet.dart';
 import 'package:syncy/widgets/session_scorecard.dart';
 import 'package:syncy/widgets/watch_lobby.dart';
 import 'package:syncy/services/player/sync_player_factory.dart';
@@ -147,6 +147,15 @@ class _RoomScreenState extends State<RoomScreen> {
 
     _streamWorker?.dispose();
     final player = controller.videoController;
+    if (player != null) {
+      unawaited(
+        controller.recordPlaybackProgress(
+          player.value.position,
+          duration: player.value.duration,
+          force: true,
+        ),
+      );
+    }
     controller.detachVideoController(player);
     player?.dispose();
     unawaited(controller.leaveRoom());
@@ -178,73 +187,18 @@ class _RoomScreenState extends State<RoomScreen> {
                     icon: const Icon(Icons.auto_awesome_rounded),
                   ),
                   IconButton(
+                    tooltip: 'Invite people',
                     onPressed: () {
-                      Clipboard.setData(
-                        ClipboardData(text: controller.room.value.id),
-                      ).then((_) {
-                        Get.snackbar(
-                          'Copied',
-                          'The room ID was copied successfully!',
-                        );
-                      });
+                      showAdaptiveSheet(
+                        RoomInviteSheet(room: controller.room.value),
+                      );
                     },
-                    icon: Icon(Icons.share_rounded),
+                    icon: const Icon(Icons.share_rounded),
                   ),
                   IconButton(
                     onPressed: () {
                       showAdaptiveSheet(
-                        ClipRRect(
-                          child: BackdropFilter(
-                            filter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
-                            child: Container(
-                              width: double.infinity,
-                              decoration: BoxDecoration(
-                                color: Colors.purple.withAlpha(100),
-                                borderRadius: BorderRadius.only(
-                                  topLeft: Radius.circular(26),
-                                  topRight: Radius.circular(26),
-                                ),
-                              ),
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 12,
-                                  horizontal: 6,
-                                ),
-                                child: Obx(
-                                  () => ListView.builder(
-                                    itemCount: controller.users.length,
-                                    itemBuilder: (ctx, i) => ListTile(
-                                      title: Text(controller.users[i].name),
-                                      trailing: AnimatedContainer(
-                                        duration: const Duration(
-                                          milliseconds: 250,
-                                        ),
-                                        width: 15,
-                                        height: 15,
-                                        decoration: BoxDecoration(
-                                          shape: BoxShape.circle,
-                                          gradient: LinearGradient(
-                                            colors: controller.users[i].online
-                                                ? [
-                                                    Colors.greenAccent,
-                                                    Colors.green,
-                                                  ]
-                                                : [
-                                                    Colors.redAccent,
-                                                    Colors.red,
-                                                  ],
-                                            // center: Alignment.center,
-                                            // radius: 0.8,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
+                        RoomParticipantsSheet(controller: controller),
                       );
                     },
                     icon: Icon(Iconsax.profile_2user_outline),
@@ -398,9 +352,9 @@ class _RoomScreenState extends State<RoomScreen> {
                 controller.pauseVideo();
               }
             },
-            onSeek: (position) {
-              controller.seekVideo(position);
-            },
+            onSeek: controller.canSeek
+                ? (position) => controller.seekVideo(position)
+                : null,
           ),
           Positioned.fill(
             child: _MediaStatusOverlay(

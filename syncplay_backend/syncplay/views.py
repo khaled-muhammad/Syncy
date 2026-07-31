@@ -66,13 +66,16 @@ def join_room(request):
     serializer = JoinRoomSerializer(data=request.data)
     
     if serializer.is_valid():
-        room_id = serializer.validated_data['room_id']
+        room = serializer.validated_data['room_id']
         user_name = serializer.validated_data['user_name']
-        
-        room = get_object_or_404(Room, id=room_id)
         
         # Check if username is already taken by an ONLINE user in this room
         existing_user = User.objects.filter(room=room, name=user_name).first()
+        if room.is_locked and existing_user is None:
+            return Response({
+                'status': 'error',
+                'message': 'This room is locked by the host'
+            }, status=status.HTTP_403_FORBIDDEN)
         if existing_user and existing_user.is_online:
             return Response({
                 'status': 'error',
@@ -100,7 +103,7 @@ def join_room(request):
                 'name': user.name,
                 'is_host': user.is_host,
             },
-            'websocket_url': f'/ws/room/{room_id}/'
+            'websocket_url': f'/ws/room/{room.id}/'
         }, status=status.HTTP_200_OK)
     
     return Response({
@@ -150,9 +153,19 @@ def control_video(request, room_id):
             'message': 'User ID required'
         }, status=status.HTTP_400_BAD_REQUEST)
     
-    # Check if user is host
     user = get_object_or_404(User, id=user_id, room=room)
-    if not user.is_host:
+    action = request.data.get('action')
+    can_seek = (
+        user.is_host or
+        room.seek_permission == 'everyone' or
+        (room.seek_permission == 'selected' and user.can_seek)
+    )
+    if action == 'seek' and not can_seek:
+        return Response({
+            'status': 'error',
+            'message': 'The host has not allowed you to seek'
+        }, status=status.HTTP_403_FORBIDDEN)
+    if action != 'seek' and not user.is_host:
         return Response({
             'status': 'error',
             'message': 'Only the host can control video playback'
@@ -295,14 +308,12 @@ def leave_room(request, room_id):
         data={}
     )
     
-    user_name = user.name
-    user.delete()
-    
-    logger.info(f"User {user_name} left room {room.name}")
-    
-    # If no users left, clean up the room after some time
-    if not room.users.exists():
-        logger.info(f"Room {room.name} is now empty")
+    # Membership remains durable so a recent-room entry can restore the same
+    # identity (especially the host) after closing or restarting the app.
+    user.is_online = False
+    user.save(update_fields=['is_online', 'last_seen'])
+
+    logger.info(f"User {user.name} left room {room.name}")
     
     return Response({
         'status': 'success',

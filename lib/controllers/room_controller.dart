@@ -9,19 +9,32 @@ import 'package:dio/dio.dart';
 import 'package:syncy/constants/app_constants.dart';
 import 'package:syncy/models/media.dart';
 import 'package:syncy/models/room.dart';
+import 'package:syncy/models/subtitle_track.dart';
 import 'package:syncy/models/user.dart';
 import 'package:syncy/routes/app_routes.dart';
 import 'package:syncy/services/player/playback_synchronizer.dart';
 import 'package:syncy/services/player/sync_player.dart';
+import 'package:syncy/services/recent_rooms_service.dart';
 import 'package:syncy/services/reliable_websocket_service.dart';
+import 'package:syncy/services/subtitle_discovery_service.dart';
 import 'package:syncy/utils/native_pickers.dart';
+import 'package:syncy/utils/playback_resume.dart';
+import 'package:syncy/utils/room_reference.dart';
 
 class RoomUser {
   final String name;
   final bool online;
   final String id;
+  final bool isHost;
+  final bool canSeek;
 
-  const RoomUser({required this.id, required this.name, required this.online});
+  const RoomUser({
+    required this.id,
+    required this.name,
+    required this.online,
+    this.isHost = false,
+    this.canSeek = false,
+  });
 }
 
 class RoomController extends GetxController with WidgetsBindingObserver {
@@ -96,16 +109,25 @@ class RoomController extends GetxController with WidgetsBindingObserver {
 
   String get currentUserId => _uuid;
 
-  // Add subtitle path storage
-  Rx<String?> currentSubtitlePath = Rx<String?>(null);
+  final availableSubtitles = <SubtitleTrack>[].obs;
+  final RxnString currentSubtitlePath = RxnString();
+  final RxString currentSubtitleLabel = ''.obs;
+  final SubtitleDiscoveryService _subtitleDiscovery =
+      SubtitleDiscoveryService();
 
   // Add subtitle delay in milliseconds (can be positive or negative)
   Rx<int> subtitleDelay = Rx<int>(0);
 
-  // Callback for when subtitles change
-  Function()? onSubtitleChanged;
-
   bool get isHost => _uuid == room.value.hostId;
+
+  bool get canSeek {
+    if (isHost || room.value.seekPermission == RoomSeekPermission.everyone) {
+      return true;
+    }
+    if (room.value.seekPermission == RoomSeekPermission.host) return false;
+    final membership = users.firstWhereOrNull((member) => member.id == _uuid);
+    return membership?.canSeek == true;
+  }
 
   String get mostUsedReaction => reactionTotals.isEmpty
       ? '—'
@@ -170,6 +192,22 @@ class RoomController extends GetxController with WidgetsBindingObserver {
             id: msg.data['id'],
             name: msg.data['name'],
             online: false,
+            isHost: users[index].isHost,
+            canSeek: users[index].canSeek,
+          );
+        }
+      } else if (msg.type == MessageType.participantRemoved) {
+        final removedId =
+            msg.data['userId']?.toString() ?? msg.data['id']?.toString() ?? '';
+        users.removeWhere((member) => member.id == removedId);
+        if (removedId == _uuid) unawaited(_handleRemovedByHost());
+      } else if (msg.type == MessageType.error) {
+        final error = msg.data['error']?.toString();
+        if (error != null && error.isNotEmpty) {
+          Get.snackbar(
+            'Room action denied',
+            error,
+            snackPosition: SnackPosition.TOP,
           );
         }
       } else if (msg.type == MessageType.chat) {
@@ -345,6 +383,13 @@ class RoomController extends GetxController with WidgetsBindingObserver {
           (mode) => mode.name == modeName,
           orElse: () => RoomMode.friends,
         ),
+        isLocked: data['is_locked'] as bool? ?? room.value.isLocked,
+        seekPermission: RoomSeekPermission.values.firstWhere(
+          (permission) =>
+              permission.name ==
+              (data['seek_permission'] ?? room.value.seekPermission.name),
+          orElse: () => RoomSeekPermission.everyone,
+        ),
       );
     }
     final usersData = data['users'];
@@ -355,6 +400,8 @@ class RoomController extends GetxController with WidgetsBindingObserver {
             id: entry['id']?.toString() ?? '',
             name: entry['name']?.toString() ?? 'Unknown',
             online: entry['is_online'] == true,
+            isHost: entry['is_host'] == true,
+            canSeek: entry['can_seek'] == true,
           ),
         ),
       );
@@ -425,6 +472,7 @@ class RoomController extends GetxController with WidgetsBindingObserver {
         requiresMediaSelection.value = false;
         beginMediaLoad('Loading $title…');
         pendingStreamUrl.value = url;
+        unawaited(discoverSubtitles(url));
       } else {
         requiresMediaSelection.value = true;
         mediaLoadMessage.value = '$title is ready to sync';
@@ -557,6 +605,18 @@ class RoomController extends GetxController with WidgetsBindingObserver {
   /// True while the current media is a LAN stream (vs a local file).
   bool get isStreamingMedia => _isNetworkUrl(room.value.currentVideoUrl ?? '');
 
+  Future<void> discoverSubtitles(String mediaSource) async {
+    currentSubtitlePath.value = null;
+    currentSubtitleLabel.value = '';
+    availableSubtitles.clear();
+
+    final tracks = await _subtitleDiscovery.discover(mediaSource);
+    final activeSource = room.value.currentVideoUrl;
+    if (activeSource != mediaSource && currentMediaPath != mediaSource) return;
+    availableSubtitles.assignAll(tracks);
+    if (tracks.isNotEmpty) selectSubtitleTrack(tracks.first, notify: false);
+  }
+
   void setUser(Map data) {
     final index = users.indexWhere((u) => u.id == data['id']);
     if (index != -1) {
@@ -564,36 +624,67 @@ class RoomController extends GetxController with WidgetsBindingObserver {
         id: data['id'],
         name: data['name'],
         online: data['is_online'],
+        isHost: data['is_host'] == true,
+        canSeek: data['can_seek'] == true,
       );
     } else {
       users.add(
-        RoomUser(id: data['id'], name: data['name'], online: data['is_online']),
+        RoomUser(
+          id: data['id'],
+          name: data['name'],
+          online: data['is_online'],
+          isHost: data['is_host'] == true,
+          canSeek: data['can_seek'] == true,
+        ),
       );
     }
   }
 
   setMedia(Media media) {
+    final resumeAt = resumePosition(
+      positionMs: media.playbackPositionMs,
+      durationMs: media.durationMs,
+    );
     currentMediaPath = media.path;
     lobbyVisible.value = true;
     showScorecard.value = false;
     _openingCountdownUsed = false;
     room.value.currentVideoUrl = media.path;
-    // Reset subtitle when changing media
-    currentSubtitlePath.value = null;
+    unawaited(discoverSubtitles(media.path));
     requiresMediaSelection.value = false;
     beginMediaLoad('Loading ${media.name}…');
     room.value = room.value.copyWith(
-      currentPosition: Duration.zero,
+      currentPosition: resumeAt,
       isPlaying: false,
     );
     unawaited(
-      _playbackSynchronizer.submitLocal(
-        position: Duration.zero,
-        isPlaying: false,
-      ),
+      _playbackSynchronizer.submitLocal(position: resumeAt, isPlaying: false),
     );
     if (_uuid == room.value.hostId && room.value.id.isNotEmpty) {
-      unawaited(wsService.changeVideo(room.value.id, _uuid, media.name));
+      unawaited(_changeMediaAndResume(media.name, resumeAt));
+    }
+    if (resumeAt > Duration.zero) {
+      Get.snackbar(
+        'Continue watching',
+        'Resuming ${media.name} at ${formatPlaybackPosition(resumeAt)}.',
+        snackPosition: SnackPosition.TOP,
+      );
+    }
+  }
+
+  Future<void> _changeMediaAndResume(
+    String title,
+    Duration resumeAt, {
+    String videoUrl = '',
+  }) async {
+    await wsService.changeVideo(
+      room.value.id,
+      _uuid,
+      title,
+      videoUrl: videoUrl,
+    );
+    if (resumeAt > Duration.zero) {
+      await wsService.seekVideo(room.value.id, _uuid, resumeAt);
     }
   }
 
@@ -603,12 +694,16 @@ class RoomController extends GetxController with WidgetsBindingObserver {
       final path = await pickSubtitleFile();
 
       if (path != null && path.isNotEmpty) {
+        final track = SubtitleTrack(
+          source: path,
+          fileName: _fileNameOf(path),
+          languageCode: 'custom',
+          label: 'Custom · ${_fileNameOf(path)}',
+        );
+        availableSubtitles.removeWhere((item) => item.source == path);
+        availableSubtitles.add(track);
         currentSubtitlePath.value = path;
-        // Notify listeners that subtitle changed
-        if (onSubtitleChanged != null) {
-          onSubtitleChanged!();
-        }
-
+        currentSubtitleLabel.value = track.label;
         Get.snackbar(
           'Subtitle Selected',
           'Subtitle file loaded: ${_fileNameOf(path)}',
@@ -628,14 +723,22 @@ class RoomController extends GetxController with WidgetsBindingObserver {
 
   String _fileNameOf(String path) => path.replaceAll('\\', '/').split('/').last;
 
+  void selectSubtitleTrack(SubtitleTrack track, {bool notify = true}) {
+    currentSubtitlePath.value = track.source;
+    currentSubtitleLabel.value = track.label;
+    if (notify) {
+      Get.snackbar(
+        'Subtitles',
+        '${track.label} selected for this device.',
+        snackPosition: SnackPosition.TOP,
+      );
+    }
+  }
+
   // Method to clear subtitle
   void clearSubtitle() {
     currentSubtitlePath.value = null;
-
-    // Notify listeners that subtitle changed
-    if (onSubtitleChanged != null) {
-      onSubtitleChanged!();
-    }
+    currentSubtitleLabel.value = '';
 
     Get.snackbar(
       'Subtitle Cleared',
@@ -648,11 +751,6 @@ class RoomController extends GetxController with WidgetsBindingObserver {
   // Method to set subtitle delay
   void setSubtitleDelay(int delayMs) {
     subtitleDelay.value = delayMs;
-
-    // Notify listeners that subtitle settings changed
-    if (onSubtitleChanged != null) {
-      onSubtitleChanged!();
-    }
 
     Get.snackbar(
       'Subtitle Delay',
@@ -670,6 +768,12 @@ class RoomController extends GetxController with WidgetsBindingObserver {
     RoomMode mode = RoomMode.friends,
   }) async {
     try {
+      final resumeAt = mediaItem == null
+          ? Duration.zero
+          : resumePosition(
+              positionMs: mediaItem.playbackPositionMs,
+              durationMs: mediaItem.durationMs,
+            );
       final res = await AppConstants.dio.post(
         '/rooms/create/',
         data: {
@@ -691,6 +795,13 @@ class RoomController extends GetxController with WidgetsBindingObserver {
           room.value.currentVideoTitle = mediaItem.name;
         }
         currentMediaPath = mediaItem?.path;
+        room.value = room.value.copyWith(currentPosition: resumeAt);
+        final subtitleSource = streamUrl != null && streamUrl.isNotEmpty
+            ? streamUrl
+            : mediaItem?.path;
+        if (subtitleSource != null) {
+          unawaited(discoverSubtitles(subtitleSource));
+        }
         lobbyVisible.value = true;
         showScorecard.value = false;
         _openingCountdownUsed = false;
@@ -699,18 +810,29 @@ class RoomController extends GetxController with WidgetsBindingObserver {
         ratings.clear();
         _reactionMoments.clear();
         _uuid = res.data['user']['id'];
+        unawaited(
+          Get.find<RecentRoomsService>().remember(room.value, wasHost: true),
+        );
         await wsService.joinRoom(room.value.id, _uuid, user.name);
 
-        // A LAN stream must be broadcast so joiners receive the URL; a local
-        // file stays on this device and needs no broadcast at create time.
-        if (streamUrl != null && streamUrl.isNotEmpty) {
+        // Every room publishes its media title so peers can choose a matching
+        // local file. LAN rooms additionally publish the playable URL.
+        final mediaTitle = streamTitle ?? mediaItem?.name;
+        if (mediaTitle != null && mediaTitle.isNotEmpty) {
           unawaited(
-            wsService.changeVideo(
-              room.value.id,
-              _uuid,
-              streamTitle ?? '',
-              videoUrl: streamUrl,
+            _changeMediaAndResume(
+              mediaTitle,
+              resumeAt,
+              videoUrl: streamUrl ?? '',
             ),
+          );
+        }
+
+        if (resumeAt > Duration.zero) {
+          Get.snackbar(
+            'Continue watching',
+            'Starting at ${formatPlaybackPosition(resumeAt)}.',
+            snackPosition: SnackPosition.TOP,
           );
         }
 
@@ -740,10 +862,22 @@ class RoomController extends GetxController with WidgetsBindingObserver {
   }
 
   Future<bool> joinRoom(String roomId) async {
+    final reference = normalizeRoomReference(roomId);
+    if (reference == null) {
+      Get.snackbar(
+        'Invalid room code',
+        'Enter an eight-character room code or invite link.',
+        backgroundColor: Colors.red.withValues(alpha: 0.8),
+        colorText: Colors.white,
+        snackPosition: SnackPosition.TOP,
+      );
+      return false;
+    }
+
     try {
       final res = await AppConstants.dio.post(
         '/rooms/join/',
-        data: {'room_id': roomId, 'user_name': user.name},
+        data: {'room_id': reference, 'user_name': user.name},
       );
 
       if (res.data['status'] == 'success') {
@@ -759,6 +893,10 @@ class RoomController extends GetxController with WidgetsBindingObserver {
         currentMediaPath = _isNetworkUrl(room.value.currentVideoUrl ?? '')
             ? null
             : room.value.currentVideoUrl;
+        final subtitleSource = room.value.currentVideoUrl;
+        if (subtitleSource != null && subtitleSource.isNotEmpty) {
+          unawaited(discoverSubtitles(subtitleSource));
+        }
         lobbyVisible.value = true;
         showScorecard.value = false;
         _openingCountdownUsed = true;
@@ -767,6 +905,12 @@ class RoomController extends GetxController with WidgetsBindingObserver {
         ratings.clear();
         _reactionMoments.clear();
         _uuid = res.data['user']['id'].toString();
+        unawaited(
+          Get.find<RecentRoomsService>().remember(
+            room.value,
+            wasHost: res.data['user']['is_host'] == true,
+          ),
+        );
         users.clear();
         final roomUsers = res.data['room']['users'];
         if (roomUsers is List) {
@@ -798,10 +942,10 @@ class RoomController extends GetxController with WidgetsBindingObserver {
         return false;
       }
     } on DioException catch (e) {
-      final serverMessage =
-          e.response?.data['message'] ??
-          e.response?.data['error'] ??
-          'Failed to join room';
+      final serverMessage = _dioErrorMessage(
+        e,
+        'Room not found or unavailable',
+      );
       Get.snackbar(
         'Error',
         serverMessage,
@@ -822,6 +966,26 @@ class RoomController extends GetxController with WidgetsBindingObserver {
     }
   }
 
+  String _dioErrorMessage(DioException error, String fallback) {
+    final data = error.response?.data;
+    if (data is Map) {
+      final direct = data['message'] ?? data['error'];
+      if (direct != null && direct.toString().trim().isNotEmpty) {
+        return direct.toString();
+      }
+      final errors = data['errors'];
+      if (errors is Map) {
+        for (final value in errors.values) {
+          if (value is List && value.isNotEmpty) return value.first.toString();
+          if (value != null && value.toString().trim().isNotEmpty) {
+            return value.toString();
+          }
+        }
+      }
+    }
+    return fallback;
+  }
+
   Future<void> _connectRoomRealtime() async {
     try {
       await wsService.joinRoom(room.value.id, _uuid, user.name);
@@ -836,11 +1000,7 @@ class RoomController extends GetxController with WidgetsBindingObserver {
       unawaited(wsService.requestRoomState());
       return;
     }
-    final position =
-        videoController?.value.position ?? room.value.currentPosition;
-    if (isHost &&
-        !_openingCountdownUsed &&
-        position <= const Duration(seconds: 1)) {
+    if (isHost && !_openingCountdownUsed) {
       _openingCountdownUsed = true;
       await startCountdown();
       return;
@@ -871,6 +1031,14 @@ class RoomController extends GetxController with WidgetsBindingObserver {
       unawaited(wsService.requestRoomState());
       return;
     }
+    if (!canSeek) {
+      Get.snackbar(
+        'Seeking is restricted',
+        'The host controls who can seek in this room.',
+        snackPosition: SnackPosition.TOP,
+      );
+      return;
+    }
 
     room.value = room.value.copyWith(currentPosition: position);
     unawaited(
@@ -880,6 +1048,35 @@ class RoomController extends GetxController with WidgetsBindingObserver {
       ),
     );
     await wsService.seekVideo(room.value.id, _uuid, position);
+  }
+
+  Future<void> setRoomLocked(bool value) async {
+    if (!isHost || !wsService.isJoined.value) return;
+    await wsService.updateRoomSettings(room.value.id, _uuid, isLocked: value);
+  }
+
+  Future<void> setSeekPermission(RoomSeekPermission permission) async {
+    if (!isHost || !wsService.isJoined.value) return;
+    await wsService.updateRoomSettings(
+      room.value.id,
+      _uuid,
+      seekPermission: permission.name,
+    );
+  }
+
+  Future<void> setParticipantCanSeek(RoomUser participant, bool value) async {
+    if (!isHost || participant.isHost || !wsService.isJoined.value) return;
+    await wsService.updateRoomSettings(
+      room.value.id,
+      _uuid,
+      participantId: participant.id,
+      canSeek: value,
+    );
+  }
+
+  Future<void> removeParticipant(RoomUser participant) async {
+    if (!isHost || participant.isHost || !wsService.isJoined.value) return;
+    await wsService.kickParticipant(room.value.id, _uuid, participant.id);
   }
 
   Future<void> leaveRoom() async {
@@ -895,26 +1092,40 @@ class RoomController extends GetxController with WidgetsBindingObserver {
     } catch (_) {
       // Local room state still needs to be released if transport cleanup fails.
     } finally {
-      users.clear();
-      chatMessages.clear();
-      floatingReactions.clear();
-      countdownEndsAt.value = null;
-      _countdownTimer?.cancel();
-      lobbyVisible.value = false;
-      showScorecard.value = false;
-      _clearTypingUsers();
-      _localTypingIdleTimer?.cancel();
-      _localTypingActive = false;
-      _lastTypingSignalAt = null;
-      _resetPlaybackSync();
-      room.value = Room(
-        createdAt: DateTime.now(),
-        id: '',
-        name: '',
-        hostId: '',
-      );
-      currentMediaPath = null;
+      _clearRoomLocally();
     }
+  }
+
+  Future<void> _handleRemovedByHost() async {
+    await wsService.disconnect();
+    _clearRoomLocally();
+    Get.offAllNamed(Routes.HOME);
+    Get.snackbar(
+      'Removed from room',
+      'The host removed you from this room.',
+      snackPosition: SnackPosition.TOP,
+    );
+  }
+
+  void _clearRoomLocally() {
+    users.clear();
+    chatMessages.clear();
+    floatingReactions.clear();
+    countdownEndsAt.value = null;
+    _countdownTimer?.cancel();
+    lobbyVisible.value = false;
+    showScorecard.value = false;
+    _clearTypingUsers();
+    _localTypingIdleTimer?.cancel();
+    _localTypingActive = false;
+    _lastTypingSignalAt = null;
+    _resetPlaybackSync();
+    room.value = Room(createdAt: DateTime.now(), id: '', name: '', hostId: '');
+    currentMediaPath = null;
+    availableSubtitles.clear();
+    currentSubtitlePath.value = null;
+    currentSubtitleLabel.value = '';
+    subtitleDelay.value = 0;
   }
 
   // Send chat message

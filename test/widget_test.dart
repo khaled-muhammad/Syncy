@@ -12,6 +12,7 @@ void main() {
   test('room snapshots prefer precise millisecond positions', () {
     final room = Room.fromJson({
       'id': 'room',
+      'join_code': 'ABCD2345',
       'name': 'Movie night',
       'host_id': 'host',
       'position_ms': 9876,
@@ -22,6 +23,7 @@ void main() {
 
     expect(room.currentPosition, const Duration(milliseconds: 9876));
     expect(room.isPlaying, isTrue);
+    expect(room.displayJoinCode, 'ABCD-2345');
   });
 
   test('room snapshots preserve the selected room mode', () {
@@ -36,5 +38,23 @@ void main() {
     });
 
     expect(room.mode, RoomMode.couple);
+  });
+
+  test('room snapshots preserve host controls', () {
+    final room = Room.fromJson({
+      'id': 'room-id',
+      'join_code': 'ABCD2345',
+      'name': 'Locked room',
+      'host_id': 'host-id',
+      'room_mode': 'friends',
+      'is_locked': true,
+      'seek_permission': 'selected',
+      'current_position': 0,
+      'is_playing': false,
+      'created_at': '2026-01-01T00:00:00Z',
+    });
+
+    expect(room.isLocked, isTrue);
+    expect(room.seekPermission, RoomSeekPermission.selected);
   });
 }

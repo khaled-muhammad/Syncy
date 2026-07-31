@@ -66,6 +66,7 @@ class _CreateRoomBottomSheetState extends State<CreateRoomBottomSheet> {
     if (streamUrl != null) {
       Get.find<RoomController>().createRoom(
         roomName,
+        mediaItem: media,
         streamUrl: streamUrl,
         streamTitle: media.name,
         mode: _roomMode,

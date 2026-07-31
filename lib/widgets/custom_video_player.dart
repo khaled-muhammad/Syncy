@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:icons_plus/icons_plus.dart';
@@ -39,21 +40,14 @@ class ControlsOverlay extends StatefulWidget {
 }
 
 class ControlsOverlayState extends State<ControlsOverlay> {
-  static const List<double> _examplePlaybackRates = <double>[
-    0.25,
-    0.5,
-    1.0,
-    1.5,
-    2.0,
-    3.0,
-    5.0,
-    10.0,
-  ];
-
   bool _controlsVisible = false;
   Timer? _hideTimer;
   List<SubtitleItem> _subtitles = [];
   String? _currentSubtitleText;
+  StreamSubscription<String?>? _subtitlePathSubscription;
+  StreamSubscription<int>? _subtitleDelaySubscription;
+  StreamSubscription<dynamic>? _subtitleListSubscription;
+  int _subtitleLoadGeneration = 0;
 
   // Double-tap-to-seek (YouTube-style: tap the left/right half of the player).
   // We detect the double tap manually so a single tap toggles the controls
@@ -75,61 +69,71 @@ class ControlsOverlayState extends State<ControlsOverlay> {
     _loadSubtitles();
     widget.controller.addListener(_updateSubtitles);
 
-    // Register for subtitle change notifications
-    widget.roomController.onSubtitleChanged = () {
-      _loadSubtitles();
-    };
+    _subtitlePathSubscription = widget.roomController.currentSubtitlePath
+        .listen((_) => _loadSubtitles());
+    _subtitleDelaySubscription = widget.roomController.subtitleDelay.listen(
+      (_) => _updateSubtitles(),
+    );
+    _subtitleListSubscription = widget.roomController.availableSubtitles.listen(
+      (_) {
+        if (mounted) setState(() {});
+      },
+    );
   }
 
   void _loadSubtitles() {
     final roomController = widget.roomController;
+    final generation = ++_subtitleLoadGeneration;
     if (roomController.currentSubtitlePath.value != null) {
-      print(
-        'Loading subtitles from: ${roomController.currentSubtitlePath.value}',
-      );
-      _parseSubtitleFile(roomController.currentSubtitlePath.value!);
+      _parseSubtitleFile(roomController.currentSubtitlePath.value!, generation);
     } else {
-      print('Clearing subtitles');
-      setState(() {
-        _subtitles.clear();
-        _currentSubtitleText = null;
-      });
+      if (mounted) {
+        setState(() {
+          _subtitles.clear();
+          _currentSubtitleText = null;
+        });
+      }
     }
   }
 
-  Future<void> _parseSubtitleFile(String filePath) async {
+  Future<void> _parseSubtitleFile(String filePath, int generation) async {
     try {
-      final file = File(filePath);
-      if (!await file.exists()) {
-        print('Subtitle file does not exist: $filePath');
-        return;
-      }
-
-      final content = await file.readAsString();
-      final extension = filePath.split('.').last.toLowerCase();
-
-      print('Parsing subtitle file with extension: $extension');
-
-      if (extension == 'srt') {
-        _subtitles = _parseSRT(content);
-      } else if (extension == 'vtt') {
-        _subtitles = _parseVTT(content);
-      }
-
-      print('Parsed ${_subtitles.length} subtitle entries');
-
-      // Debug: Print first few subtitles
-      for (int i = 0; i < _subtitles.length && i < 3; i++) {
-        final sub = _subtitles[i];
-        print(
-          'Subtitle $i: ${sub.start} -> ${sub.end}: ${sub.text.substring(0, sub.text.length > 50 ? 50 : sub.text.length)}...',
+      final uri = Uri.tryParse(filePath);
+      final isRemote =
+          uri != null && (uri.scheme == 'http' || uri.scheme == 'https');
+      late String content;
+      if (isRemote) {
+        final response = await Dio().get<String>(
+          filePath,
+          options: Options(responseType: ResponseType.plain),
         );
+        content = response.data ?? '';
+      } else {
+        final file = File(filePath);
+        if (!await file.exists()) return;
+        content = await file.readAsString();
       }
+      content = content
+          .replaceFirst('\uFEFF', '')
+          .replaceAll('\r\n', '\n')
+          .replaceAll('\r', '\n');
+      final sourcePath = uri?.path.isNotEmpty == true ? uri!.path : filePath;
+      final extension =
+          uri?.queryParameters['format'] ??
+          sourcePath.split('.').last.toLowerCase();
 
-      setState(() {});
-    } catch (e) {
-      print('Error parsing subtitle file: $e');
-    }
+      List<SubtitleItem> parsed = const [];
+      if (extension == 'srt') {
+        parsed = _parseSRT(content);
+      } else if (extension == 'vtt') {
+        parsed = _parseVTT(content);
+      }
+      if (!mounted || generation != _subtitleLoadGeneration) return;
+      setState(() {
+        _subtitles = parsed;
+        _currentSubtitleText = null;
+      });
+    } catch (_) {}
   }
 
   List<SubtitleItem> _parseSRT(String content) {
@@ -217,9 +221,6 @@ class ControlsOverlayState extends State<ControlsOverlay> {
 
     // If after stripping formatting we have empty text, return the original
     if (result.isEmpty && text.isNotEmpty) {
-      print(
-        'Warning: Text became empty after formatting removal. Original: $text',
-      );
       // Try a more conservative approach - just remove known problematic tags
       result = text.replaceAll(RegExp(r'\{\\[cf]&[^}]*\}'), '');
       result = result.replaceAll(RegExp(r'\{\\[fb][^}]*\}'), '');
@@ -244,7 +245,7 @@ class ControlsOverlayState extends State<ControlsOverlay> {
 
     for (final block in blocks) {
       final lines = block.trim().split('\n');
-      if (lines.length >= 1) {
+      if (lines.isNotEmpty) {
         // Find the timing line which contains " --> "
         int timeLineIndex = -1;
         for (int i = 0; i < lines.length; i++) {
@@ -259,26 +260,15 @@ class ControlsOverlayState extends State<ControlsOverlay> {
         final timeLine = lines[timeLineIndex];
         final textLines = lines.sublist(timeLineIndex + 1);
 
-        // More flexible regex pattern for timestamps
-        final timeMatch = RegExp(
-          r'(\d{2}):(\d{2}):(\d{2})[\.,](\d{3}) --> (\d{2}):(\d{2}):(\d{2})[\.,](\d{3})',
-        ).firstMatch(timeLine);
+        final timingParts = timeLine.split(' --> ');
+        final start = timingParts.isEmpty
+            ? null
+            : _parseVttTimestamp(timingParts.first);
+        final end = timingParts.length < 2
+            ? null
+            : _parseVttTimestamp(timingParts[1].split(' ').first);
 
-        if (timeMatch != null) {
-          final start = Duration(
-            hours: int.parse(timeMatch.group(1)!),
-            minutes: int.parse(timeMatch.group(2)!),
-            seconds: int.parse(timeMatch.group(3)!),
-            milliseconds: int.parse(timeMatch.group(4)!),
-          );
-
-          final end = Duration(
-            hours: int.parse(timeMatch.group(5)!),
-            minutes: int.parse(timeMatch.group(6)!),
-            seconds: int.parse(timeMatch.group(7)!),
-            milliseconds: int.parse(timeMatch.group(8)!),
-          );
-
+        if (start != null && end != null) {
           // Join all lines and strip basic formatting tags
           final text = _stripFormattingTags(textLines.join('\n'));
 
@@ -288,6 +278,19 @@ class ControlsOverlayState extends State<ControlsOverlay> {
     }
 
     return subtitles;
+  }
+
+  Duration? _parseVttTimestamp(String value) {
+    final match = RegExp(
+      r'^(?:(\d{1,2}):)?(\d{2}):(\d{2})[\.,](\d{3})$',
+    ).firstMatch(value.trim());
+    if (match == null) return null;
+    return Duration(
+      hours: int.tryParse(match.group(1) ?? '0') ?? 0,
+      minutes: int.parse(match.group(2)!),
+      seconds: int.parse(match.group(3)!),
+      milliseconds: int.parse(match.group(4)!),
+    );
   }
 
   void _updateSubtitles() {
@@ -308,12 +311,6 @@ class ControlsOverlayState extends State<ControlsOverlay> {
       if (adjustedPosition >= subtitle.start &&
           adjustedPosition <= subtitle.end) {
         newSubtitleText = subtitle.text;
-        // Debug: Print when we find a matching subtitle
-        if (newSubtitleText != _currentSubtitleText) {
-          print(
-            'Displaying subtitle at ${position.inSeconds}s (adjusted: ${adjustedPosition.inSeconds}s): ${newSubtitleText.substring(0, newSubtitleText.length > 50 ? 50 : newSubtitleText.length)}...',
-          );
-        }
         break;
       }
     }
@@ -331,8 +328,9 @@ class ControlsOverlayState extends State<ControlsOverlay> {
     _seekIndicatorTimer?.cancel();
     widget.controller.removeListener(_updateSubtitles);
 
-    // Clean up subtitle change callback
-    widget.roomController.onSubtitleChanged = null;
+    _subtitlePathSubscription?.cancel();
+    _subtitleDelaySubscription?.cancel();
+    _subtitleListSubscription?.cancel();
 
     super.dispose();
   }
@@ -381,11 +379,8 @@ class ControlsOverlayState extends State<ControlsOverlay> {
     if (target < Duration.zero) target = Duration.zero;
     if (target > value.duration) target = value.duration;
     final callback = widget.onSeek;
-    if (callback != null) {
-      callback(target);
-    } else {
-      unawaited(widget.controller.seekTo(target));
-    }
+    if (callback == null) return;
+    callback(target);
   }
 
   void _onSurfaceTapUp(double tapDx, double width) {
@@ -396,6 +391,7 @@ class ControlsOverlayState extends State<ControlsOverlay> {
     _lastTapAt = now;
 
     if (consecutive) {
+      if (widget.onSeek == null) return;
       // Second (or further) quick tap => this is a seek gesture, not a toggle.
       if (!_seekChainActive) {
         _seekChainActive = true;
@@ -786,7 +782,16 @@ class ControlsOverlayState extends State<ControlsOverlay> {
                         tooltip: 'Subtitle Options',
                         onSelected: (String value) {
                           final roomController = widget.roomController;
-                          if (value == 'select') {
+                          if (value.startsWith('track:')) {
+                            final index = int.tryParse(value.substring(6));
+                            if (index != null &&
+                                index <
+                                    roomController.availableSubtitles.length) {
+                              roomController.selectSubtitleTrack(
+                                roomController.availableSubtitles[index],
+                              );
+                            }
+                          } else if (value == 'select') {
                             roomController.selectSubtitleFile();
                           } else if (value == 'clear') {
                             roomController.clearSubtitle();
@@ -798,13 +803,62 @@ class ControlsOverlayState extends State<ControlsOverlay> {
                         itemBuilder: (BuildContext context) {
                           final roomController = widget.roomController;
                           return [
+                            if (roomController
+                                .availableSubtitles
+                                .isNotEmpty) ...[
+                              const PopupMenuItem<String>(
+                                enabled: false,
+                                child: Text(
+                                  'AVAILABLE LANGUAGES',
+                                  style: TextStyle(
+                                    color: Colors.white54,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 1,
+                                  ),
+                                ),
+                              ),
+                              for (
+                                var index = 0;
+                                index <
+                                    roomController.availableSubtitles.length;
+                                index++
+                              )
+                                PopupMenuItem<String>(
+                                  value: 'track:$index',
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        roomController
+                                                    .currentSubtitlePath
+                                                    .value ==
+                                                roomController
+                                                    .availableSubtitles[index]
+                                                    .source
+                                            ? Icons.check_circle_rounded
+                                            : Icons.language_rounded,
+                                        size: 17,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          roomController
+                                              .availableSubtitles[index]
+                                              .label,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              const PopupMenuDivider(),
+                            ],
                             PopupMenuItem<String>(
                               value: 'select',
                               child: Row(
                                 children: [
                                   Icon(Icons.file_upload, size: 16),
                                   SizedBox(width: 8),
-                                  Text('Select Subtitle'),
+                                  Text('Choose another file'),
                                 ],
                               ),
                             ),
@@ -992,16 +1046,18 @@ class ControlsOverlayState extends State<ControlsOverlay> {
                                         .duration
                                         .inMilliseconds
                                         .toDouble(),
-                                    onChanged: (value) {
-                                      final newPosition = Duration(
-                                        milliseconds: value.toInt(),
-                                      );
-                                      widget.controller.seekTo(newPosition);
-                                      if (widget.onSeek != null) {
-                                        widget.onSeek!(newPosition);
-                                      }
-                                      _resetHideTimer();
-                                    },
+                                    onChanged: widget.onSeek == null
+                                        ? null
+                                        : (value) {
+                                            final newPosition = Duration(
+                                              milliseconds: value.toInt(),
+                                            );
+                                            widget.controller.seekTo(
+                                              newPosition,
+                                            );
+                                            widget.onSeek!(newPosition);
+                                            _resetHideTimer();
+                                          },
                                   ),
                                 ),
                               ],

@@ -29,6 +29,7 @@ void main() {
 
     expect(message.data['videoTitle'], 'Movie.mp4');
     expect(message.data['videoUrl'], isEmpty);
+    expect(message.toJson()['type'], 'video_changed');
   });
 
   test('join errors remain actionable transport errors', () {
@@ -54,5 +55,23 @@ void main() {
     expect(decoded.type, MessageType.typing);
     expect(decoded.eventId, message.eventId);
     expect(decoded.data, {'isTyping': true, 'userName': 'Alice'});
+  });
+
+  test('host controls use backend wire names', () {
+    final settings = Message.roomSettings(
+      roomId: 'room',
+      userId: 'host',
+      isLocked: true,
+      seekPermission: 'selected',
+    );
+    final kick = Message.kickParticipant(
+      roomId: 'room',
+      userId: 'host',
+      participantId: 'member',
+    );
+
+    expect(settings.toJson()['type'], 'room_settings');
+    expect(settings.data['isLocked'], isTrue);
+    expect(kick.toJson()['type'], 'kick_participant');
   });
 }

@@ -1,6 +1,6 @@
 import uuid
 
-from asgiref.sync import async_to_sync
+from asgiref.sync import async_to_sync, sync_to_async
 from channels.testing.websocket import WebsocketCommunicator
 from django.test import TransactionTestCase, override_settings
 
@@ -284,3 +284,136 @@ class ReliableWebSocketTests(TransactionTestCase):
         )
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.json()['room']['room_mode'], 'couple')
+
+    def test_room_join_code_is_serialized_and_accepts_formatted_input(self):
+        self.assertEqual(len(self.room.join_code), 8)
+        self.assertNotIn('0', self.room.join_code)
+        self.assertNotIn('O', self.room.join_code)
+        self.assertNotIn('1', self.room.join_code)
+        self.assertNotIn('I', self.room.join_code)
+
+        response = self.client.post(
+            '/api/rooms/join/',
+            {
+                'room_id': self.room.display_join_code.lower(),
+                'user_name': 'Bob',
+            },
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['room']['join_code'], self.room.join_code)
+        self.assertEqual(response.json()['room']['id'], str(self.room.id))
+
+    def test_join_room_keeps_accepting_legacy_uuid(self):
+        response = self.client.post(
+            '/api/rooms/join/',
+            {'room_id': str(self.room.id), 'user_name': 'Bob'},
+            content_type='application/json',
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_leave_preserves_membership_for_one_tap_rejoin(self):
+        response = self.client.delete(
+            f'/api/rooms/{self.room.id}/leave/',
+            {'user_id': str(self.user.id)},
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.user.refresh_from_db()
+        self.assertFalse(self.user.is_online)
+
+        rejoin = self.client.post(
+            '/api/rooms/join/',
+            {'room_id': self.room.join_code, 'user_name': self.user.name},
+            content_type='application/json',
+        )
+        self.assertEqual(rejoin.status_code, 200)
+        self.assertEqual(rejoin.json()['user']['id'], str(self.user.id))
+        self.assertTrue(rejoin.json()['user']['is_host'])
+
+    def test_locked_room_rejects_new_people_but_allows_members_to_rejoin(self):
+        self.room.is_locked = True
+        self.room.save(update_fields=['is_locked', 'updated_at'])
+
+        blocked = self.client.post(
+            '/api/rooms/join/',
+            {'room_id': self.room.join_code, 'user_name': 'Bob'},
+            content_type='application/json',
+        )
+        self.assertEqual(blocked.status_code, 403)
+
+        rejoin = self.client.post(
+            '/api/rooms/join/',
+            {'room_id': self.room.join_code, 'user_name': self.user.name},
+            content_type='application/json',
+        )
+        self.assertEqual(rejoin.status_code, 200)
+
+    def test_room_permissions_are_serialized(self):
+        self.room.is_locked = True
+        self.room.seek_permission = 'selected'
+        self.room.save(
+            update_fields=['is_locked', 'seek_permission', 'updated_at']
+        )
+        self.user.can_seek = True
+        self.user.save(update_fields=['can_seek', 'last_seen'])
+
+        response = self.client.get(f'/api/rooms/{self.room.id}/')
+        payload = response.json()['room']
+        self.assertTrue(payload['is_locked'])
+        self.assertEqual(payload['seek_permission'], 'selected')
+        self.assertTrue(payload['users'][0]['can_seek'])
+
+    def test_selected_participant_seek_is_enforced_over_websocket(self):
+        async_to_sync(self._selected_seek_scenario)()
+
+    async def _selected_seek_scenario(self):
+        self.room.seek_permission = 'selected'
+        await sync_to_async(self.room.save)(
+            update_fields=['seek_permission', 'updated_at']
+        )
+        bob = await sync_to_async(User.objects.create)(
+            room=self.room,
+            name='Bob',
+            is_online=False,
+        )
+        socket = WebsocketCommunicator(
+            application, f'/ws/room/{self.room.id}/'
+        )
+        await socket.connect()
+        await socket.send_json_to(
+            {
+                'type': 'join',
+                'userId': str(bob.id),
+                'eventId': str(uuid.uuid4()),
+                'data': {'userName': 'Bob'},
+            }
+        )
+        await self.receive_types(socket, {'user_joined', 'room_update', 'ack'})
+
+        await socket.send_json_to(
+            {
+                'type': 'seek',
+                'userId': str(bob.id),
+                'eventId': str(uuid.uuid4()),
+                'data': {'positionMs': 5000},
+            }
+        )
+        denied = await self.receive_types(socket, {'error', 'room_update'})
+        self.assertIn('not allowed', denied['error']['data']['error'])
+
+        bob.can_seek = True
+        await sync_to_async(bob.save)(update_fields=['can_seek', 'last_seen'])
+        await socket.send_json_to(
+            {
+                'type': 'seek',
+                'userId': str(bob.id),
+                'eventId': str(uuid.uuid4()),
+                'data': {'positionMs': 5000},
+            }
+        )
+        allowed = await self.receive_types(socket, {'seek', 'ack'})
+        self.assertEqual(allowed['seek']['data']['position_ms'], 5000)
+        await socket.disconnect()

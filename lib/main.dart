@@ -6,7 +6,10 @@ import 'package:isar_community/isar.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:syncy/controllers/room_controller.dart';
+import 'package:syncy/services/recent_rooms_service.dart';
 import 'package:syncy/services/lan/lan_host_service.dart';
+import 'package:syncy/services/room_link_service.dart';
+import 'package:syncy/services/update_service.dart';
 import 'package:syncy/models/media.dart';
 import 'package:syncy/models/user.dart';
 import 'package:syncy/routes/app_pages.dart';
@@ -14,6 +17,8 @@ import 'package:syncy/services/thumbnail_service.dart';
 import 'package:syncy/theme/app_theme.dart';
 import 'package:syncy/utils/platform_utils.dart';
 import 'package:window_manager/window_manager.dart';
+import 'package:syncy/widgets/room_link_listener.dart';
+import 'package:syncy/widgets/update_notification_listener.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -36,6 +41,9 @@ void main() async {
 
   // Initialize ThumbnailService
   Get.put(ThumbnailService());
+  await Get.putAsync(() => RecentRoomsService().init(), permanent: true);
+  await Get.putAsync(() => RoomLinkService().init(), permanent: true);
+  final updateService = Get.put(UpdateService(), permanent: true);
   // Room state owns the active socket and must remain a single app-wide
   // instance. Recreating it mid-room leaves fullscreen bound to a fresh,
   // disconnected controller while the portrait screen still has the old one.
@@ -50,6 +58,7 @@ void main() async {
   }
 
   runApp(const MyApp());
+  unawaited(updateService.init().then((service) => service.check()));
 }
 
 /// Gives the desktop build a real window: a comfortable default size and a
@@ -84,6 +93,9 @@ class MyApp extends StatelessWidget {
       themeMode: ThemeMode.dark,
       initialRoute: AppPages.INITIAL,
       getPages: AppPages.routes,
+      builder: (context, child) => UpdateNotificationListener(
+        child: RoomLinkListener(child: child ?? const SizedBox.shrink()),
+      ),
       debugShowCheckedModeBanner: false,
     );
   }

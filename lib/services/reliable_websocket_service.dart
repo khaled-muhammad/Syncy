@@ -399,6 +399,36 @@ class ReliableWebSocketService extends GetxService {
     _sendNow(Message.rating(roomId: roomId, userId: userId, rating: rating));
   }
 
+  Future<void> updateRoomSettings(
+    String roomId,
+    String userId, {
+    bool? isLocked,
+    String? seekPermission,
+    String? participantId,
+    bool? canSeek,
+  }) => _sendReliable(
+    Message.roomSettings(
+      roomId: roomId,
+      userId: userId,
+      isLocked: isLocked,
+      seekPermission: seekPermission,
+      participantId: participantId,
+      canSeek: canSeek,
+    ),
+  );
+
+  Future<void> kickParticipant(
+    String roomId,
+    String userId,
+    String participantId,
+  ) => _sendReliable(
+    Message.kickParticipant(
+      roomId: roomId,
+      userId: userId,
+      participantId: participantId,
+    ),
+  );
+
   Future<void> leaveRoom(String roomId, String userId) async {
     _shouldReconnect = false;
     _reconnectTimer?.cancel();

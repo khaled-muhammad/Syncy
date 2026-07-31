@@ -37,6 +37,9 @@ newest play, pause, or seek command.
 - Android lifecycle reconciliation for status shade, app switching, and split screen
 - Friends and Couple room modes
 - Participant presence and durable room membership
+- Shareable `syncy://` room links and readable, copyable join codes
+- Recent rooms with one-tap rejoin on Android and Windows
+- Host moderation with room locking, participant removal, and seek permissions
 - Fullscreen playback, desktop keyboard controls, and double-tap seeking
 - Playback rates from 0.25x to 10x
 
@@ -48,7 +51,13 @@ newest play, pause, or seek command.
 - Secure six-digit PC pairing over the local network
 - Browse a paired Windows library from Android
 - Direct LAN streaming with HTTP byte ranges for seeking
-- SRT and VTT subtitles with adjustable timing offset
+- Automatic matching SRT/VTT discovery with per-device language and timing offset
+- Continue-watching shelves that resume unfinished videos at the saved position
+
+### Updates
+
+- Android sideloads and portable Windows builds check GitHub Releases for updates
+- Update prompts link directly to the signed universal APK or Windows ZIP
 
 ### Social
 
@@ -116,14 +125,18 @@ are documented in [`syncplay_backend/DEPLOYMENT.md`](syncplay_backend/DEPLOYMENT
 ## Build
 
 ```bash
-flutter build apk --release
 flutter build windows --release
 ```
+
+Android release builds require the permanent release keystore environment
+variables described in [`docs/android-signing.md`](docs/android-signing.md).
+Debug builds continue to work without signing secrets.
 
 GitHub Actions builds Android and Windows on every push to `main`. Tags matching
 `v*` publish a GitHub release with a universal APK, ABI-specific APKs, and a
 portable Windows ZIP. The website and README download URLs always resolve
-through GitHub's latest release.
+through GitHub's latest release. Release APKs are rejected before upload unless
+they match the repository's pinned signing-certificate fingerprint.
 
 ## Project layout
 

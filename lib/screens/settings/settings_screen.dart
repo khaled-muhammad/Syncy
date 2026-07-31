@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import 'package:icons_plus/icons_plus.dart';
 import 'package:syncy/controllers/settings_controller.dart';
 import 'package:syncy/routes/app_routes.dart';
+import 'package:syncy/services/update_service.dart';
 import 'package:syncy/widgets/native_purple_mesh_background.dart';
 
 class SettingsScreen extends GetView<SettingsController> {
@@ -10,6 +11,7 @@ class SettingsScreen extends GetView<SettingsController> {
 
   @override
   Widget build(BuildContext context) {
+    final updates = Get.find<UpdateService>();
     return NativePurpleMeshBackground(
       child: Scaffold(
         backgroundColor: Colors.transparent,
@@ -62,19 +64,59 @@ class SettingsScreen extends GetView<SettingsController> {
                 onTap: () => Get.toNamed(Routes.PLANS),
               ),
               const Divider(),
+              Obx(
+                () => ListTile(
+                  leading: const Icon(Icons.system_update_rounded),
+                  title: Text(
+                    updates.availableUpdate.value == null
+                        ? 'Check for updates'
+                        : 'Download Syncy ${updates.availableUpdate.value!.version}',
+                  ),
+                  subtitle: Text(
+                    updates.statusMessage.value.isEmpty
+                        ? 'Installed version ${updates.currentVersion.value}'
+                        : updates.statusMessage.value,
+                  ),
+                  trailing: updates.isChecking.value
+                      ? const SizedBox.square(
+                          dimension: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.refresh_rounded),
+                  onTap: updates.isChecking.value
+                      ? null
+                      : () async {
+                          final available = updates.availableUpdate.value;
+                          if (available != null) {
+                            await updates.openDownload(available);
+                            return;
+                          }
+                          final update = await updates.check(force: true);
+                          if (update == null) {
+                            Get.snackbar(
+                              'Update check',
+                              updates.statusMessage.value,
+                            );
+                          }
+                        },
+                ),
+              ),
+              const Divider(),
               ListTile(
                 leading: const Icon(Icons.info_outline),
                 title: const Text('About'),
-                subtitle: const Text('Version 1.0.0'),
+                subtitle: Obx(
+                  () => Text('Version ${updates.currentVersion.value}'),
+                ),
                 onTap: () {
                   // Show about dialog or navigate to about page
                   Get.dialog(
                     AlertDialog(
                       title: const Text('About Syncy'),
-                      content: const Text(
+                      content: Text(
                         'Syncy - The Ultimate Cross-Platform Media Sync & Watch Party App\n\n'
                         'Built with 💜 by passionate developers\n\n'
-                        'Version 1.0.0',
+                        'Version ${updates.currentVersion.value}',
                       ),
                       actions: [
                         TextButton(

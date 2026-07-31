@@ -5,6 +5,32 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+val releaseSigningValues =
+    mapOf(
+        "ANDROID_KEYSTORE_PATH" to providers.environmentVariable("ANDROID_KEYSTORE_PATH").orNull,
+        "ANDROID_KEYSTORE_PASSWORD" to providers.environmentVariable("ANDROID_KEYSTORE_PASSWORD").orNull,
+        "ANDROID_KEY_ALIAS" to providers.environmentVariable("ANDROID_KEY_ALIAS").orNull,
+        "ANDROID_KEY_PASSWORD" to providers.environmentVariable("ANDROID_KEY_PASSWORD").orNull,
+    )
+
+val missingReleaseSigningValues =
+    releaseSigningValues
+        .filterValues { it.isNullOrBlank() }
+        .keys
+
+val releaseBuildRequested =
+    gradle.startParameter.taskNames.any { taskName ->
+        taskName.contains("release", ignoreCase = true)
+    }
+
+if (releaseBuildRequested && missingReleaseSigningValues.isNotEmpty()) {
+    throw GradleException(
+        "Release signing is not configured. Missing environment variable(s): " +
+            missingReleaseSigningValues.joinToString() +
+            ". See docs/android-signing.md.",
+    )
+}
+
 android {
     namespace = "com.example.syncy"
     compileSdk = flutter.compileSdkVersion
@@ -30,11 +56,29 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        create("release") {
+            if (missingReleaseSigningValues.isEmpty()) {
+                val keystoreFile = file(checkNotNull(releaseSigningValues["ANDROID_KEYSTORE_PATH"]))
+
+                if (releaseBuildRequested && !keystoreFile.isFile) {
+                    throw GradleException(
+                        "Release keystore does not exist at ${keystoreFile.absolutePath}.",
+                    )
+                }
+
+                storeFile = keystoreFile
+                storePassword = releaseSigningValues["ANDROID_KEYSTORE_PASSWORD"]
+                keyAlias = releaseSigningValues["ANDROID_KEY_ALIAS"]
+                keyPassword = releaseSigningValues["ANDROID_KEY_PASSWORD"]
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            // Never fall back to the machine-specific debug key for a distributable build.
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 }

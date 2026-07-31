@@ -15,6 +15,7 @@ import 'package:syncy/widgets/adaptive_sheet.dart';
 import 'package:syncy/widgets/floating_navbar.dart';
 import 'package:syncy/widgets/media_card.dart';
 import 'package:syncy/widgets/native_purple_mesh_background.dart';
+import 'package:syncy/widgets/recent_rooms.dart';
 
 /// Entry screen for both form factors.
 ///
@@ -188,43 +189,47 @@ class _MobileHomeScreen extends GetView<HomeController> {
 
   Widget _buildVideoPage() {
     if (!controller.hasPermission.value) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Text(
-              'Storage permission required',
-              style: TextStyle(fontSize: 18, color: Colors.white),
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: controller.checkPermissions,
-              child: const Text('Grant Permission'),
-            ),
-          ],
+      return _videoStateWithRecents(
+        Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Text(
+                'Storage permission required',
+                style: TextStyle(fontSize: 18, color: Colors.white),
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: controller.checkPermissions,
+                child: const Text('Grant Permission'),
+              ),
+            ],
+          ),
         ),
       );
     }
 
     if (controller.isLoading.value && controller.media.isEmpty) {
-      return const _InitialMediaLoadingState();
+      return _videoStateWithRecents(const _InitialMediaLoadingState());
     }
 
     if (controller.media.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Text(
-              'No media files found',
-              style: TextStyle(fontSize: 18, color: Colors.white),
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: controller.refreshMediaFiles,
-              child: const Text('Refresh'),
-            ),
-          ],
+      return _videoStateWithRecents(
+        Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Text(
+                'No media files found',
+                style: TextStyle(fontSize: 18, color: Colors.white),
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: controller.refreshMediaFiles,
+                child: const Text('Refresh'),
+              ),
+            ],
+          ),
         ),
       );
     }
@@ -256,11 +261,25 @@ class _MobileHomeScreen extends GetView<HomeController> {
             ),
           ),
           const SizedBox(height: 24),
+          const RecentRoomsView(),
           for (final shelf in shelves)
             _MediaShelfSection(
               shelf: shelf,
               onFocused: controller.selectMediaAccent,
             ),
+        ],
+      ),
+    );
+  }
+
+  Widget _videoStateWithRecents(Widget child) {
+    return SafeArea(
+      child: Column(
+        children: [
+          const SizedBox(height: 22),
+          const RecentRoomsView(),
+          Expanded(child: child),
+          const SizedBox(height: 96),
         ],
       ),
     );
