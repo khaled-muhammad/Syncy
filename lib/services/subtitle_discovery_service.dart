@@ -38,7 +38,15 @@ const _languageNames = <String, String>{
 };
 
 class SubtitleDiscoveryService {
-  SubtitleDiscoveryService({Dio? dio}) : _dio = dio ?? Dio();
+  SubtitleDiscoveryService({Dio? dio})
+    : _dio =
+          dio ??
+          Dio(
+            BaseOptions(
+              connectTimeout: const Duration(seconds: 4),
+              receiveTimeout: const Duration(seconds: 6),
+            ),
+          );
 
   final Dio _dio;
 
@@ -52,7 +60,7 @@ class SubtitleDiscoveryService {
 
   Future<List<SubtitleTrack>> _discoverRemote(Uri mediaUri) async {
     try {
-      final listUri = mediaUri.replace(path: '${mediaUri.path}/subtitles');
+      final listUri = remoteSubtitleListUri(mediaUri);
       final response = await _dio.getUri<dynamic>(listUri);
       final body = response.data;
       final values = body is Map ? body['subtitles'] : null;
@@ -66,12 +74,10 @@ class SubtitleDiscoveryService {
             final track = SubtitleTrack.fromJson(json);
             if (index == null) return track;
             final extension = track.fileName.split('.').last.toLowerCase();
-            final source = mediaUri.replace(
-              path: '${mediaUri.path}/subtitles/$index',
-              queryParameters: {
-                ...mediaUri.queryParameters,
-                'format': extension,
-              },
+            final source = remoteSubtitleTrackUri(
+              mediaUri,
+              index: index,
+              extension: extension,
             );
             return track.copyWith(source: source.toString());
           })
@@ -82,6 +88,24 @@ class SubtitleDiscoveryService {
     }
   }
 }
+
+/// Builds LAN subtitle endpoints without dropping the media-scoped stream
+/// token. Losing `?t=...` would make automatic subtitle loading fail with 401
+/// on every phone except the one holding the full pairing credential.
+Uri remoteSubtitleListUri(Uri mediaUri) =>
+    mediaUri.replace(path: '${mediaUri.path}/subtitles');
+
+Uri remoteSubtitleTrackUri(
+  Uri mediaUri, {
+  required int index,
+  required String extension,
+}) => mediaUri.replace(
+  path: '${mediaUri.path}/subtitles/$index',
+  queryParameters: {
+    ...mediaUri.queryParameters,
+    'format': extension.toLowerCase(),
+  },
+);
 
 List<SubtitleTrack> discoverLocalSubtitlesSync(String videoPath) {
   final normalized = videoPath.replaceAll('\\', '/');

@@ -93,7 +93,7 @@ class LanClientService {
   Future<void> unpair(String deviceId) => _pairing.removePairedPc(deviceId);
 
   /// Fetches the PC's library. Throws [LanUnauthorized] if the token is stale.
-  Future<List<RemoteMedia>> fetchLibrary(LanDevice pc) async {
+  Future<RemoteLibrary> fetchLibrary(LanDevice pc) async {
     final res = await _dio.get(
       '${pc.baseUrl}/library',
       options: Options(headers: {'authorization': 'Bearer ${pc.token}'}),
@@ -102,12 +102,7 @@ class LanClientService {
     if (res.statusCode != 200 || res.data is! Map) {
       throw Exception('Could not load the library');
     }
-    final list = (res.data as Map)['media'];
-    if (list is! List) return const [];
-    return list
-        .whereType<Map>()
-        .map((e) => RemoteMedia.fromJson(e.cast<String, dynamic>()))
-        .toList();
+    return RemoteLibrary.fromJson(Map<String, dynamic>.from(res.data as Map));
   }
 
   /// Asks the PC for a media-scoped stream URL to put into a room. Using a

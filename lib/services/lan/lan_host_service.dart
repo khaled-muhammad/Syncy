@@ -174,22 +174,33 @@ class LanHostService extends GetxService {
 
   Response _library(Request request) {
     if (!_bearerValid(request)) return _unauthorized();
+    final roots = _isar.folders.where().findAllSync();
     final items = _isar.medias.where().findAllSync().map((m) {
       int? size;
       try {
         final f = File(m.path);
         if (f.existsSync()) size = f.lengthSync();
       } catch (_) {}
+      final location = _libraryLocation(m.path, roots);
       return {
         'id': m.id,
         'name': m.name,
+        'rootId': location.rootId,
+        'rootName': location.rootName,
+        'relativeFolder': location.relativeFolder,
+        // Kept for phones on v1.0.8 and older.
         'folder': _folderOf(m.path),
         'sizeBytes': size,
         'hasThumbnail': m.thumbnailPath != null && m.thumbnailPath!.isNotEmpty,
         'hasSubtitles': hasMatchingSubtitleSync(m.path),
       };
     }).toList();
-    return _json({'media': items});
+    return _json({
+      'roots': [
+        for (final root in roots) {'id': '${root.id}', 'name': root.name},
+      ],
+      'media': items,
+    });
   }
 
   Future<Response> _thumb(Request request, String id) async {
@@ -328,6 +339,51 @@ class LanHostService extends GetxService {
     return parts.length >= 2 ? parts[parts.length - 2] : '';
   }
 
+  _RemoteLibraryLocation _libraryLocation(
+    String mediaPath,
+    List<Folder> roots,
+  ) {
+    final unifiedMedia = _withoutTrailingSlash(mediaPath.replaceAll('\\', '/'));
+    final comparableMedia = _comparablePath(unifiedMedia);
+
+    // Prefer the deepest matching root if the user has indexed nested roots.
+    final candidates = roots.toList(growable: false)
+      ..sort((a, b) => b.path.length.compareTo(a.path.length));
+    for (final root in candidates) {
+      final unifiedRoot = _withoutTrailingSlash(
+        root.path.replaceAll('\\', '/'),
+      );
+      final comparableRoot = _comparablePath(unifiedRoot);
+      if (!comparableMedia.startsWith('$comparableRoot/')) continue;
+
+      final relativeFile = unifiedMedia.substring(unifiedRoot.length + 1);
+      final slash = relativeFile.lastIndexOf('/');
+      return _RemoteLibraryLocation(
+        rootId: '${root.id}',
+        rootName: root.name,
+        relativeFolder: slash < 0 ? '' : relativeFile.substring(0, slash),
+      );
+    }
+
+    // Legacy records can outlive a removed root briefly. Keep them available
+    // without exposing their absolute path to the phone.
+    return _RemoteLibraryLocation(
+      rootId: 'other',
+      rootName: 'Other',
+      relativeFolder: _folderOf(mediaPath),
+    );
+  }
+
+  String _comparablePath(String path) =>
+      Platform.isWindows ? path.toLowerCase() : path;
+
+  String _withoutTrailingSlash(String path) {
+    if (path.length > 1 && path.endsWith('/')) {
+      return path.substring(0, path.length - 1);
+    }
+    return path;
+  }
+
   String _contentTypeFor(String path) {
     final ext = path.split('.').last.toLowerCase();
     switch (ext) {
@@ -365,6 +421,18 @@ class _StreamGrant {
   _StreamGrant(this.mediaId, this.expiry);
   final int mediaId;
   final DateTime expiry;
+}
+
+class _RemoteLibraryLocation {
+  const _RemoteLibraryLocation({
+    required this.rootId,
+    required this.rootName,
+    required this.relativeFolder,
+  });
+
+  final String rootId;
+  final String rootName;
+  final String relativeFolder;
 }
 
 /// A resolved HTTP byte range, inclusive of both ends.

@@ -49,9 +49,9 @@ newest play, pause, or seek command.
 - User-selected Windows library folders with nested folder browsing
 - Desktop playback through `media_kit` for broad container and codec support
 - Secure six-digit PC pairing over the local network
-- Browse a paired Windows library from Android
+- Explore a paired Windows library as folders and search it from Android
 - Direct LAN streaming with HTTP byte ranges for seeking
-- Automatic matching SRT/VTT discovery with per-device language and timing offset
+- Automatic matching SRT/VTT transfer from the PC, with per-device language and timing offset
 - Continue-watching shelves that resume unfinished videos at the saved position
 
 ### Updates

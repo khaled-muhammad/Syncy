@@ -4,6 +4,19 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:syncy/services/subtitle_discovery_service.dart';
 
 void main() {
+  test('LAN subtitle URLs preserve scoped stream authorization', () {
+    final media = Uri.parse('http://192.168.1.8:8770/media/42?t=secret-token');
+
+    expect(
+      remoteSubtitleListUri(media).toString(),
+      'http://192.168.1.8:8770/media/42/subtitles?t=secret-token',
+    );
+    expect(
+      remoteSubtitleTrackUri(media, index: 1, extension: 'SRT').toString(),
+      'http://192.168.1.8:8770/media/42/subtitles/1?t=secret-token&format=srt',
+    );
+  });
+
   test('discovers matching SRT and VTT language variants', () async {
     final directory = await Directory.systemTemp.createTemp('syncy-subtitles-');
     addTearDown(() => directory.delete(recursive: true));

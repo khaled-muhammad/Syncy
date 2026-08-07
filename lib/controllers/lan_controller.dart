@@ -16,8 +16,31 @@ class LanController extends GetxController {
 
   final selectedPc = Rxn<LanDevice>();
   final remoteLibrary = <RemoteMedia>[].obs;
+  final remoteRoots = <RemoteLibraryRoot>[].obs;
+  final currentDirectory = ''.obs;
+  final librarySearchQuery = ''.obs;
   final isLoadingLibrary = false.obs;
   final libraryError = RxnString();
+
+  RemoteLibrary get _librarySnapshot => RemoteLibrary(
+    roots: remoteRoots.toList(growable: false),
+    media: remoteLibrary.toList(growable: false),
+  );
+
+  List<RemoteDirectory> get childDirectories =>
+      librarySearchQuery.value.trim().isNotEmpty
+      ? const []
+      : _librarySnapshot.childDirectories(currentDirectory.value);
+
+  List<RemoteMedia> get visibleRemoteMedia => _librarySnapshot.visibleMedia(
+    currentDirectory.value,
+    searchQuery: librarySearchQuery.value,
+  );
+
+  List<RemoteBreadcrumb> get libraryBreadcrumbs =>
+      _librarySnapshot.breadcrumbs(currentDirectory.value);
+
+  bool get isSearching => librarySearchQuery.value.trim().isNotEmpty;
 
   @override
   void onInit() {
@@ -33,6 +56,7 @@ class LanController extends GetxController {
   }
 
   /// Discovers PCs on the network and merges them with previously-paired ones.
+  @override
   Future<void> refresh() async {
     final client = _client;
     if (client == null) return;
@@ -72,10 +96,15 @@ class LanController extends GetxController {
   Future<void> openLibrary(LanDevice pc) async {
     selectedPc.value = pc;
     remoteLibrary.clear();
+    remoteRoots.clear();
+    currentDirectory.value = '';
+    librarySearchQuery.value = '';
     libraryError.value = null;
     isLoadingLibrary.value = true;
     try {
-      remoteLibrary.value = await _client!.fetchLibrary(pc);
+      final library = await _client!.fetchLibrary(pc);
+      remoteRoots.assignAll(library.roots);
+      remoteLibrary.assignAll(library.media);
     } on LanUnauthorized {
       libraryError.value = 'This PC no longer trusts this phone. Pair again.';
     } catch (_) {
@@ -83,6 +112,19 @@ class LanController extends GetxController {
     } finally {
       isLoadingLibrary.value = false;
     }
+  }
+
+  void openDirectory(String key) {
+    currentDirectory.value = key;
+    librarySearchQuery.value = '';
+  }
+
+  void navigateToParentDirectory() {
+    currentDirectory.value = parentRemoteDirectory(currentDirectory.value);
+  }
+
+  void searchLibrary(String value) {
+    librarySearchQuery.value = value;
   }
 
   String? thumbnailUrl(RemoteMedia media) {
