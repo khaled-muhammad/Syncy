@@ -73,8 +73,14 @@ class _PcLibraryScreenState extends State<PcLibraryScreen> {
               title: Text(controller.selectedPc.value?.name ?? 'PC library'),
               actions: [
                 IconButton(
-                  tooltip: 'Refresh library',
-                  icon: const Icon(Icons.refresh_rounded),
+                  tooltip: controller.isRefreshingLibrary
+                      ? 'Restart refresh'
+                      : 'Refresh library',
+                  icon: Icon(
+                    controller.isRefreshingLibrary
+                        ? Icons.sync_rounded
+                        : Icons.refresh_rounded,
+                  ),
                   onPressed: () {
                     final pc = controller.selectedPc.value;
                     if (pc != null) {
@@ -110,9 +116,7 @@ class _LibraryBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (controller.isLoadingLibrary.value) {
-      return const Center(child: CircularProgressIndicator());
-    }
+    if (controller.isInitialLibraryLoad) return const _LibrarySkeleton();
     final error = controller.libraryError.value;
     if (error != null) return _LibraryError(message: error);
     if (controller.remoteLibrary.isEmpty) {
@@ -126,6 +130,11 @@ class _LibraryBody extends StatelessWidget {
 
     return Column(
       children: [
+        if (controller.isRefreshingLibrary)
+          const LinearProgressIndicator(
+            minHeight: 2,
+            backgroundColor: Colors.transparent,
+          ),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 6, 16, 10),
           child: TextField(
@@ -166,6 +175,119 @@ class _LibraryBody extends StatelessWidget {
           _Breadcrumbs(controller: controller),
         Expanded(child: _LibraryExplorer(controller: controller)),
       ],
+    );
+  }
+}
+
+class _LibrarySkeleton extends StatefulWidget {
+  const _LibrarySkeleton();
+
+  @override
+  State<_LibrarySkeleton> createState() => _LibrarySkeletonState();
+}
+
+class _LibrarySkeletonState extends State<_LibrarySkeleton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pulse;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulse = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 850),
+      lowerBound: 0,
+      upperBound: 1,
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _pulse,
+      builder: (context, _) {
+        final color = Colors.white.withValues(alpha: .07 + _pulse.value * .07);
+        return IgnorePointer(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _SkeletonBox(
+                height: 56,
+                color: color,
+                margin: const EdgeInsets.fromLTRB(16, 6, 16, 12),
+              ),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: _SkeletonBox(
+                  height: 30,
+                  width: 116,
+                  color: color,
+                  margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Row(
+                  children: [
+                    Expanded(child: _SkeletonBox(height: 68, color: color)),
+                    const SizedBox(width: 12),
+                    Expanded(child: _SkeletonBox(height: 68, color: color)),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+              Expanded(
+                child: GridView.builder(
+                  physics: const NeverScrollableScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                    maxCrossAxisExtent: 220,
+                    crossAxisSpacing: 14,
+                    mainAxisSpacing: 18,
+                    childAspectRatio: 3 / 4,
+                  ),
+                  itemCount: 6,
+                  itemBuilder: (_, _) => _SkeletonBox(color: color),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _SkeletonBox extends StatelessWidget {
+  const _SkeletonBox({
+    this.height,
+    this.width,
+    required this.color,
+    this.margin,
+  });
+
+  final double? height;
+  final double? width;
+  final Color color;
+  final EdgeInsetsGeometry? margin;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: height,
+      width: width,
+      margin: margin,
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.white.withValues(alpha: .04)),
+      ),
     );
   }
 }

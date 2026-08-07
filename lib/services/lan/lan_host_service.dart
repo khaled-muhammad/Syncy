@@ -192,7 +192,10 @@ class LanHostService extends GetxService {
         'folder': _folderOf(m.path),
         'sizeBytes': size,
         'hasThumbnail': m.thumbnailPath != null && m.thumbnailPath!.isNotEmpty,
-        'hasSubtitles': hasMatchingSubtitleSync(m.path),
+        // Updated in one batched pass when the desktop rescans its folders.
+        // Doing filesystem discovery once per video here made large phone
+        // library requests quadratic and blocked refresh requests behind it.
+        'hasSubtitles': m.hasSubtitles,
       };
     }).toList();
     return _json({

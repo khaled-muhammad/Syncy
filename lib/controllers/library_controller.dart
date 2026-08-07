@@ -190,19 +190,49 @@ class LibraryController extends GetxController {
           .where((item) => removedPaths.contains(_normalizePath(item.path)))
           .toList(growable: false);
 
-      if (newPaths.isNotEmpty || removedMedia.isNotEmpty) {
+      // Discover sidecars once per directory for the complete root. This also
+      // updates existing videos when a subtitle is added or removed later.
+      Set<String> videosWithSubtitles = const {};
+      try {
+        videosWithSubtitles = await findVideoPathsWithMatchingSubtitles(
+          discovery.paths,
+        );
+      } catch (error, stackTrace) {
+        debugPrint('Subtitle discovery skipped: $error\n$stackTrace');
+      }
+      final normalizedSubtitlePaths = videosWithSubtitles
+          .map(_normalizePath)
+          .toSet();
+      final normalizedDiscoveredPaths = discovery.paths
+          .map(_normalizePath)
+          .toSet();
+      final subtitleUpdates = existingUnderRoot
+          .where((item) => !removedPaths.contains(_normalizePath(item.path)))
+          // An incomplete scan must not clear cached subtitle state for files
+          // in a directory the OS refused to enumerate.
+          .where(
+            (item) =>
+                normalizedDiscoveredPaths.contains(_normalizePath(item.path)),
+          )
+          .where((item) {
+            final hasSubtitles = normalizedSubtitlePaths.contains(
+              _normalizePath(item.path),
+            );
+            return item.hasSubtitles != hasSubtitles;
+          })
+          .toList(growable: false);
+      for (final item in subtitleUpdates) {
+        item.hasSubtitles = normalizedSubtitlePaths.contains(
+          _normalizePath(item.path),
+        );
+      }
+
+      if (newPaths.isNotEmpty ||
+          removedMedia.isNotEmpty ||
+          subtitleUpdates.isNotEmpty) {
         scanStatus.value = newPaths.length == 1
             ? 'Adding 1 video…'
             : 'Updating ${folder.name}…';
-
-        Set<String> videosWithSubtitles = const {};
-        try {
-          videosWithSubtitles = await findVideoPathsWithMatchingSubtitles(
-            newPaths,
-          );
-        } catch (error, stackTrace) {
-          debugPrint('Subtitle discovery skipped: $error\n$stackTrace');
-        }
 
         final records = newPaths
             .map(
@@ -211,7 +241,9 @@ class LibraryController extends GetxController {
                 ..name = _fileName(path)
                 ..thumbnailPath = ''
                 ..addedAt = DateTime.now()
-                ..hasSubtitles = videosWithSubtitles.contains(path),
+                ..hasSubtitles = normalizedSubtitlePaths.contains(
+                  _normalizePath(path),
+                ),
             )
             .toList(growable: false);
 
@@ -225,6 +257,9 @@ class LibraryController extends GetxController {
             await isar.medias.deleteAll(
               removedMedia.map((item) => item.id).toList(growable: false),
             );
+          }
+          if (subtitleUpdates.isNotEmpty) {
+            await isar.medias.putAll(subtitleUpdates);
           }
           if (records.isNotEmpty) await isar.medias.putAll(records);
         });

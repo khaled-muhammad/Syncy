@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:dio/dio.dart';
 import 'package:get/get.dart';
 import 'package:syncy/controllers/room_controller.dart';
 import 'package:syncy/models/lan_device.dart';
@@ -6,9 +9,18 @@ import 'package:syncy/models/room.dart';
 import 'package:syncy/services/lan/lan_client_service.dart';
 import 'package:syncy/services/lan/pairing_store.dart';
 
+enum LanLibraryLoadState { idle, loading, refreshing, loaded, error }
+
+typedef RemoteLibraryLoader =
+    Future<RemoteLibrary> Function(LanDevice pc, {CancelToken? cancelToken});
+
 /// Phone-side state for connecting to and browsing a PC on the LAN.
 class LanController extends GetxController {
+  LanController({RemoteLibraryLoader? libraryLoader})
+    : _libraryLoader = libraryLoader;
+
   LanClientService? _client;
+  final RemoteLibraryLoader? _libraryLoader;
 
   final devices = <LanDevice>[].obs;
   final isScanning = false.obs;
@@ -19,8 +31,19 @@ class LanController extends GetxController {
   final remoteRoots = <RemoteLibraryRoot>[].obs;
   final currentDirectory = ''.obs;
   final librarySearchQuery = ''.obs;
-  final isLoadingLibrary = false.obs;
+  final libraryLoadState = LanLibraryLoadState.idle.obs;
   final libraryError = RxnString();
+
+  final Completer<void> _clientReady = Completer<void>();
+  CancelToken? _libraryCancelToken;
+  Object? _clientInitializationError;
+  int _libraryRequestId = 0;
+
+  bool get isInitialLibraryLoad =>
+      libraryLoadState.value == LanLibraryLoadState.loading;
+
+  bool get isRefreshingLibrary =>
+      libraryLoadState.value == LanLibraryLoadState.refreshing;
 
   RemoteLibrary get _librarySnapshot => RemoteLibrary(
     roots: remoteRoots.toList(growable: false),
@@ -45,14 +68,25 @@ class LanController extends GetxController {
   @override
   void onInit() {
     super.onInit();
-    _init();
+    if (_libraryLoader != null) {
+      ready.value = true;
+      _clientReady.complete();
+    } else {
+      unawaited(_init());
+    }
   }
 
   Future<void> _init() async {
-    final store = await PairingStore.open();
-    _client = LanClientService(store);
-    ready.value = true;
-    await refresh();
+    try {
+      final store = await PairingStore.open();
+      _client = LanClientService(store);
+    } catch (error) {
+      _clientInitializationError = error;
+    } finally {
+      ready.value = true;
+      if (!_clientReady.isCompleted) _clientReady.complete();
+    }
+    if (_client != null) await refresh();
   }
 
   /// Discovers PCs on the network and merges them with previously-paired ones.
@@ -94,23 +128,66 @@ class LanController extends GetxController {
 
   /// Loads [pc]'s library into [remoteLibrary].
   Future<void> openLibrary(LanDevice pc) async {
+    final requestId = ++_libraryRequestId;
+    _libraryCancelToken?.cancel('A newer library load started');
+    final cancelToken = CancelToken();
+    _libraryCancelToken = cancelToken;
+
+    final samePc = selectedPc.value?.deviceId == pc.deviceId;
+    final keepCurrentLibrary = samePc && remoteLibrary.isNotEmpty;
     selectedPc.value = pc;
-    remoteLibrary.clear();
-    remoteRoots.clear();
-    currentDirectory.value = '';
-    librarySearchQuery.value = '';
+    if (!keepCurrentLibrary) {
+      remoteLibrary.clear();
+      remoteRoots.clear();
+      currentDirectory.value = '';
+      librarySearchQuery.value = '';
+    }
     libraryError.value = null;
-    isLoadingLibrary.value = true;
+    libraryLoadState.value = keepCurrentLibrary
+        ? LanLibraryLoadState.refreshing
+        : LanLibraryLoadState.loading;
+
     try {
-      final library = await _client!.fetchLibrary(pc);
+      final RemoteLibrary library;
+      final injectedLoader = _libraryLoader;
+      if (injectedLoader != null) {
+        library = await injectedLoader(pc, cancelToken: cancelToken);
+      } else {
+        await _clientReady.future;
+        if (requestId != _libraryRequestId) return;
+        final client = _client;
+        if (client == null) {
+          throw StateError(
+            'LAN client unavailable: $_clientInitializationError',
+          );
+        }
+        library = await client.fetchLibrary(pc, cancelToken: cancelToken);
+      }
+      if (requestId != _libraryRequestId) return;
       remoteRoots.assignAll(library.roots);
       remoteLibrary.assignAll(library.media);
+      libraryLoadState.value = LanLibraryLoadState.loaded;
     } on LanUnauthorized {
+      if (requestId != _libraryRequestId) return;
       libraryError.value = 'This PC no longer trusts this phone. Pair again.';
+      libraryLoadState.value = LanLibraryLoadState.error;
+    } on DioException catch (error) {
+      if (CancelToken.isCancel(error) || requestId != _libraryRequestId) return;
+      _finishLibraryLoadWithNetworkError(keepCurrentLibrary);
     } catch (_) {
-      libraryError.value = "Couldn't reach this PC. Check you're on its Wi-Fi.";
-    } finally {
-      isLoadingLibrary.value = false;
+      if (requestId != _libraryRequestId) return;
+      _finishLibraryLoadWithNetworkError(keepCurrentLibrary);
+    }
+  }
+
+  void _finishLibraryLoadWithNetworkError(bool keptCurrentLibrary) {
+    const message = "Couldn't reach this PC. Check you're on its Wi-Fi.";
+    if (keptCurrentLibrary) {
+      libraryLoadState.value = LanLibraryLoadState.loaded;
+      Get.snackbar('Refresh failed', message, snackPosition: SnackPosition.TOP);
+    } else {
+      libraryError.value = message;
+      libraryLoadState.value = LanLibraryLoadState.error;
     }
   }
 
@@ -162,5 +239,12 @@ class LanController extends GetxController {
     } catch (_) {
       return 'Could not start the stream from this PC.';
     }
+  }
+
+  @override
+  void onClose() {
+    _libraryRequestId++;
+    _libraryCancelToken?.cancel('LAN controller closed');
+    super.onClose();
   }
 }

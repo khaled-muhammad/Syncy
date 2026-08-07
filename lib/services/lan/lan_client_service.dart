@@ -93,9 +93,13 @@ class LanClientService {
   Future<void> unpair(String deviceId) => _pairing.removePairedPc(deviceId);
 
   /// Fetches the PC's library. Throws [LanUnauthorized] if the token is stale.
-  Future<RemoteLibrary> fetchLibrary(LanDevice pc) async {
+  Future<RemoteLibrary> fetchLibrary(
+    LanDevice pc, {
+    CancelToken? cancelToken,
+  }) async {
     final res = await _dio.get(
       '${pc.baseUrl}/library',
+      cancelToken: cancelToken,
       options: Options(headers: {'authorization': 'Bearer ${pc.token}'}),
     );
     if (res.statusCode == 401) throw const LanUnauthorized();
