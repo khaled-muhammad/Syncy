@@ -52,7 +52,8 @@ class _UpdateNotificationListenerState
             children: [
               Text(
                 'You have ${Get.find<UpdateService>().currentVersion.value}. '
-                'Download the signed ${Theme.of(context).platform == TargetPlatform.windows ? 'Windows ZIP' : 'Android APK'} from GitHub.',
+                '${update.canInstallDirectly ? 'Syncy will download, verify, and install' : 'Download'} the signed '
+                '${Theme.of(context).platform == TargetPlatform.windows ? 'Windows update' : 'Android APK'} from GitHub.',
               ),
               if (update.notes.trim().isNotEmpty) ...[
                 const SizedBox(height: 12),
@@ -70,18 +71,12 @@ class _UpdateNotificationListenerState
             FilledButton.icon(
               onPressed: () async {
                 Get.back();
-                final opened = await Get.find<UpdateService>().openDownload(
-                  update,
-                );
-                if (!opened) {
-                  Get.snackbar(
-                    'Could not open download',
-                    'Visit the Syncy GitHub releases page.',
-                  );
-                }
+                await runUpdateFlow(update);
               },
               icon: const Icon(Icons.download_rounded),
-              label: const Text('Download'),
+              label: Text(
+                update.canInstallDirectly ? 'Update now' : 'Download',
+              ),
             ),
           ],
         ),
@@ -99,4 +94,84 @@ class _UpdateNotificationListenerState
 
   @override
   Widget build(BuildContext context) => widget.child;
+}
+
+Future<void> runUpdateFlow(ReleaseUpdate update) async {
+  final service = Get.find<UpdateService>();
+  final direct = service.directInstallEnabled(update);
+  final future = service.install(update);
+  if (direct) {
+    unawaited(
+      Get.dialog<void>(
+        const _UpdateProgressDialog(),
+        barrierDismissible: false,
+      ),
+    );
+  }
+  final outcome = await future;
+  if (Get.isDialogOpen == true && direct) Get.back();
+  switch (outcome) {
+    case UpdateInstallOutcome.permissionRequested:
+      Get.snackbar(
+        'One permission needed',
+        'Allow Syncy to install updates. Android will continue automatically.',
+        duration: const Duration(seconds: 6),
+      );
+    case UpdateInstallOutcome.failed:
+      Get.snackbar('Update failed', service.statusMessage.value);
+    case UpdateInstallOutcome.cancelled:
+      Get.snackbar('Update cancelled', 'No changes were made.');
+    case UpdateInstallOutcome.launched:
+    case UpdateInstallOutcome.browserOpened:
+      break;
+  }
+}
+
+class _UpdateProgressDialog extends StatelessWidget {
+  const _UpdateProgressDialog();
+
+  @override
+  Widget build(BuildContext context) {
+    final service = Get.find<UpdateService>();
+    return Obx(
+      () => AlertDialog(
+        icon: const Icon(Icons.system_update_rounded, size: 34),
+        title: const Text('Updating Syncy'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            LinearProgressIndicator(
+              value:
+                  service.downloadProgress.value > 0 &&
+                      service.downloadProgress.value < 1
+                  ? service.downloadProgress.value
+                  : null,
+            ),
+            const SizedBox(height: 14),
+            Text(
+              service.statusMessage.value,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.white70),
+            ),
+            if (service.downloadProgress.value > 0 &&
+                service.downloadProgress.value < 1) ...[
+              const SizedBox(height: 6),
+              Text(
+                '${(service.downloadProgress.value * 100).round()}%',
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: service.canCancelUpdate.value
+                ? service.cancelInstall
+                : null,
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+  }
 }

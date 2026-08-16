@@ -13,14 +13,20 @@ enum LanLibraryLoadState { idle, loading, refreshing, loaded, error }
 
 typedef RemoteLibraryLoader =
     Future<RemoteLibrary> Function(LanDevice pc, {CancelToken? cancelToken});
+typedef RemoteStreamUrlLoader =
+    Future<String> Function(LanDevice pc, RemoteMedia media);
 
 /// Phone-side state for connecting to and browsing a PC on the LAN.
 class LanController extends GetxController {
-  LanController({RemoteLibraryLoader? libraryLoader})
-    : _libraryLoader = libraryLoader;
+  LanController({
+    RemoteLibraryLoader? libraryLoader,
+    RemoteStreamUrlLoader? streamUrlLoader,
+  }) : _libraryLoader = libraryLoader,
+       _streamUrlLoader = streamUrlLoader;
 
   LanClientService? _client;
   final RemoteLibraryLoader? _libraryLoader;
+  final RemoteStreamUrlLoader? _streamUrlLoader;
 
   final devices = <LanDevice>[].obs;
   final isScanning = false.obs;
@@ -215,6 +221,22 @@ class LanController extends GetxController {
     return pc == null ? const {} : _client!.authHeader(pc);
   }
 
+  /// Resolves a short-lived, media-scoped URL for playback on this phone.
+  /// This is intentionally independent of rooms: the PC serves the bytes
+  /// directly over the LAN and no backend or WebSocket session is created.
+  Future<String> streamUrlForRemote(RemoteMedia media) async {
+    final pc = selectedPc.value;
+    if (pc == null) throw StateError('No PC selected');
+    final injectedLoader = _streamUrlLoader;
+    if (injectedLoader != null) return injectedLoader(pc, media);
+    await _clientReady.future;
+    final client = _client;
+    if (client == null) {
+      throw StateError('LAN client unavailable: $_clientInitializationError');
+    }
+    return client.streamUrlFor(pc, media);
+  }
+
   /// Case A: creates a room whose media is streamed from the PC. Returns an
   /// error message on failure, or null on success (navigation happens in
   /// RoomController).
@@ -226,7 +248,7 @@ class LanController extends GetxController {
     final pc = selectedPc.value;
     if (pc == null) return 'No PC selected';
     try {
-      final url = await _client!.streamUrlFor(pc, media);
+      final url = await streamUrlForRemote(media);
       await Get.find<RoomController>().createRoom(
         roomName,
         streamUrl: url,

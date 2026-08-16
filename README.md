@@ -51,13 +51,15 @@ newest play, pause, or seek command.
 - Secure six-digit PC pairing over the local network
 - Explore a paired Windows library as folders and search it from Android
 - Direct LAN streaming with HTTP byte ranges for seeking
+- Watch PC-hosted videos directly on Android without creating a room
 - Automatic matching SRT/VTT transfer from the PC, with per-device language and timing offset
 - Continue-watching shelves that resume unfinished videos at the saved position
 
 ### Updates
 
 - Android sideloads and portable Windows builds check GitHub Releases for updates
-- Update prompts link directly to the signed universal APK or Windows ZIP
+- Protocol-versioned release manifests pin the exact platform asset, size, and SHA-256
+- Verified Android APKs open in the system installer; Windows updates stage, restart, and roll back automatically if the new build cannot start
 
 ### Social
 

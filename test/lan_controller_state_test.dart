@@ -87,4 +87,26 @@ void main() {
     expect(controller.isRefreshingLibrary, isFalse);
     expect(controller.remoteLibrary.single.id, 2);
   });
+
+  test('direct playback resolves a stream without creating a room', () async {
+    LanDevice? requestedPc;
+    RemoteMedia? requestedMedia;
+    final controller = LanController(
+      libraryLoader: (pc, {cancelToken}) => Future.value(library(7)),
+      streamUrlLoader: (pc, media) async {
+        requestedPc = pc;
+        requestedMedia = media;
+        return 'http://${pc.host}:${pc.port}/media/${media.id}?t=scoped';
+      },
+    )..onInit();
+    addTearDown(controller.onClose);
+
+    await controller.openLibrary(pc);
+    final media = controller.remoteLibrary.single;
+    final url = await controller.streamUrlForRemote(media);
+
+    expect(requestedPc, pc);
+    expect(requestedMedia, media);
+    expect(url, 'http://192.168.1.8:8770/media/7?t=scoped');
+  });
 }

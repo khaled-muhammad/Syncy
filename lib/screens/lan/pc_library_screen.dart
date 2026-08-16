@@ -6,8 +6,8 @@ import 'package:syncy/models/remote_media.dart';
 import 'package:syncy/widgets/adaptive_sheet.dart';
 import 'package:syncy/widgets/native_purple_mesh_background.dart';
 
-/// Phone screen: explore a paired PC's folders, search its videos, and start a
-/// room that streams the selected file (and its matching subtitles) over LAN.
+/// Phone screen: explore a paired PC's folders, search its videos, then either
+/// watch directly or create a room that streams the selected file over LAN.
 class PcLibraryScreen extends StatefulWidget {
   const PcLibraryScreen({super.key});
 

@@ -62,7 +62,7 @@ class AppConstants {
 
   // App Settings
   static const String appName = 'Syncy';
-  static const String appVersion = '1.0.10';
+  static const String appVersion = '1.0.11';
 
   // Colors
   static const Color primaryColor = Color(0xFF2196F3);

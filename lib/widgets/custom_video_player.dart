@@ -28,12 +28,14 @@ class ControlsOverlay extends StatefulWidget {
     required this.roomController,
     this.onPlayToggle,
     this.onSeek,
+    this.showReactionsInFullscreen = true,
   });
 
   final SyncPlayer controller;
   final RoomController roomController;
   final Function(bool isPlaying)? onPlayToggle;
   final Function(Duration position)? onSeek;
+  final bool showReactionsInFullscreen;
 
   @override
   State<ControlsOverlay> createState() => ControlsOverlayState();
@@ -358,7 +360,9 @@ class ControlsOverlayState extends State<ControlsOverlay> {
   }
 
   void _togglePlayPause() {
-    final bool newIsPlaying = !widget.roomController.room.value.isPlaying;
+    // The player is authoritative here. This also lets the same chrome drive
+    // standalone LAN playback where there is deliberately no room state.
+    final bool newIsPlaying = !widget.controller.value.isPlaying;
     final callback = widget.onPlayToggle;
     if (callback != null) {
       callback(newIsPlaying);
@@ -519,6 +523,7 @@ class ControlsOverlayState extends State<ControlsOverlay> {
             roomController: widget.roomController,
             onPlayToggle: widget.onPlayToggle,
             onSeek: widget.onSeek,
+            showReactions: widget.showReactionsInFullscreen,
           ),
         ),
       );
@@ -1097,12 +1102,14 @@ class _FullScreenVideoPage extends StatefulWidget {
   final RoomController roomController;
   final Function(bool)? onPlayToggle;
   final Function(Duration)? onSeek;
+  final bool showReactions;
 
   const _FullScreenVideoPage({
     required this.controller,
     required this.roomController,
     this.onPlayToggle,
     this.onSeek,
+    this.showReactions = true,
   });
 
   @override
@@ -1252,6 +1259,7 @@ class _FullScreenVideoPageState extends State<_FullScreenVideoPage> {
                       roomController: widget.roomController,
                       onPlayToggle: widget.onPlayToggle,
                       onSeek: widget.onSeek,
+                      showReactionsInFullscreen: widget.showReactions,
                     ),
                   ],
                 ),
@@ -1268,6 +1276,7 @@ class _FullScreenVideoPageState extends State<_FullScreenVideoPage> {
                   roomController: widget.roomController,
                   onPlayToggle: widget.onPlayToggle,
                   onSeek: widget.onSeek,
+                  showReactionsInFullscreen: widget.showReactions,
                 ),
               ],
             ),
@@ -1285,69 +1294,71 @@ class _FullScreenVideoPageState extends State<_FullScreenVideoPage> {
           children: [
             Center(child: videoSurface),
             // Screen-level placement avoids clipping and FittedBox distortion.
-            Positioned.fill(
-              child: ReactionOverlay(
-                bottomInset: 125,
-                controller: widget.roomController,
+            if (widget.showReactions)
+              Positioned.fill(
+                child: ReactionOverlay(
+                  bottomInset: 125,
+                  controller: widget.roomController,
+                ),
               ),
-            ),
-            SafeArea(
-              minimum: const EdgeInsets.only(bottom: 70),
-              child: Align(
-                alignment: Alignment.bottomCenter,
-                child: Semantics(
-                  container: true,
-                  label: 'Reaction controls',
-                  hint: _reactionDockVisible
-                      ? 'Swipe down to hide'
-                      : 'Swipe up or tap to show',
-                  onTap: _reactionDockVisible ? null : _showReactionDock,
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.translucent,
+            if (widget.showReactions)
+              SafeArea(
+                minimum: const EdgeInsets.only(bottom: 70),
+                child: Align(
+                  alignment: Alignment.bottomCenter,
+                  child: Semantics(
+                    container: true,
+                    label: 'Reaction controls',
+                    hint: _reactionDockVisible
+                        ? 'Swipe down to hide'
+                        : 'Swipe up or tap to show',
                     onTap: _reactionDockVisible ? null : _showReactionDock,
-                    child: AnimatedSlide(
-                      offset: _reactionDockVisible
-                          ? Offset.zero
-                          : const Offset(0, 1.85),
-                      duration: _reactionDockVisible
-                          ? const Duration(milliseconds: 180)
-                          : const Duration(milliseconds: 280),
-                      curve: _reactionDockVisible
-                          ? Curves.easeOutBack
-                          : Curves.easeInCubic,
-                      child: AnimatedOpacity(
-                        opacity: _reactionDockVisible ? 1 : .14,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.translucent,
+                      onTap: _reactionDockVisible ? null : _showReactionDock,
+                      child: AnimatedSlide(
+                        offset: _reactionDockVisible
+                            ? Offset.zero
+                            : const Offset(0, 1.85),
                         duration: _reactionDockVisible
-                            ? const Duration(milliseconds: 140)
-                            : const Duration(milliseconds: 240),
-                        curve: Curves.easeOut,
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                              width: 38,
-                              height: 4,
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: .72),
-                                borderRadius: BorderRadius.circular(999),
+                            ? const Duration(milliseconds: 180)
+                            : const Duration(milliseconds: 280),
+                        curve: _reactionDockVisible
+                            ? Curves.easeOutBack
+                            : Curves.easeInCubic,
+                        child: AnimatedOpacity(
+                          opacity: _reactionDockVisible ? 1 : .14,
+                          duration: _reactionDockVisible
+                              ? const Duration(milliseconds: 140)
+                              : const Duration(milliseconds: 240),
+                          curve: Curves.easeOut,
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 38,
+                                height: 4,
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: .72),
+                                  borderRadius: BorderRadius.circular(999),
+                                ),
                               ),
-                            ),
-                            const SizedBox(height: 7),
-                            IgnorePointer(
-                              ignoring: !_reactionDockVisible,
-                              child: ReactionBar(
-                                controller: widget.roomController,
-                                onReactionSent: _onReactionSent,
+                              const SizedBox(height: 7),
+                              IgnorePointer(
+                                ignoring: !_reactionDockVisible,
+                                child: ReactionBar(
+                                  controller: widget.roomController,
+                                  onReactionSent: _onReactionSent,
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
                     ),
                   ),
                 ),
               ),
-            ),
           ],
         ),
       ),

@@ -9,9 +9,33 @@ permissions:
   contents: write
 
 jobs:
+  metadata:
+    name: Validate release metadata
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Match tag to app version
+        id: release
+        shell: bash
+        run: |
+          set -euo pipefail
+          app_version="$(sed -nE 's/^version:[[:space:]]*([^+[:space:]]+).*/\1/p' pubspec.yaml)"
+          tag_version="${GITHUB_REF_NAME#v}"
+          if [[ -z "$app_version" || "$tag_version" != "$app_version" ]]; then
+            echo "Tag $GITHUB_REF_NAME does not match pubspec version $app_version" >&2
+            exit 1
+          fi
+          echo "version=$app_version" >> "$GITHUB_OUTPUT"
+
   android:
     name: Build Android release
     runs-on: ubuntu-latest
+    needs: metadata
 
     steps:
       - name: Checkout repository
@@ -32,6 +56,9 @@ jobs:
 
       - name: Resolve dependencies
         run: flutter pub get
+
+      - name: Run protocol and app tests
+        run: flutter test --no-pub
 
       - name: Test Android signing verifier
         run: bash .github/scripts/test_verify_android_signing.sh
@@ -80,6 +107,7 @@ jobs:
   windows:
     name: Build Windows release
     runs-on: windows-latest
+    needs: metadata
 
     steps:
       - name: Checkout repository
@@ -94,6 +122,9 @@ jobs:
 
       - name: Resolve dependencies
         run: flutter pub get
+
+      - name: Run protocol and app tests
+        run: flutter test --no-pub
 
       - name: Build Windows app
         run: flutter build windows --release
@@ -116,16 +147,27 @@ jobs:
 
   publish:
     name: Publish GitHub release
-    needs: [android, windows]
+    needs: [metadata, android, windows]
     runs-on: ubuntu-latest
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Download release assets
         uses: actions/download-artifact@v4
         with:
           pattern: "*-release"
           path: release
           merge-multiple: true
+
+      - name: Generate update protocol manifest
+        run: |
+          python .github/scripts/generate_update_manifest.py \
+            --version "${{ needs.metadata.outputs.version }}" \
+            --android release/app-universal.apk \
+            --windows release/syncy-windows-release.zip \
+            --output release/syncy-update-v1.json
 
       - name: Publish release
         uses: softprops/action-gh-release@v2

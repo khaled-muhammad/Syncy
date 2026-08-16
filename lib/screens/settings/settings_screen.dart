@@ -5,6 +5,7 @@ import 'package:syncy/controllers/settings_controller.dart';
 import 'package:syncy/routes/app_routes.dart';
 import 'package:syncy/services/update_service.dart';
 import 'package:syncy/widgets/native_purple_mesh_background.dart';
+import 'package:syncy/widgets/update_notification_listener.dart';
 
 class SettingsScreen extends GetView<SettingsController> {
   const SettingsScreen({super.key});
@@ -70,7 +71,7 @@ class SettingsScreen extends GetView<SettingsController> {
                   title: Text(
                     updates.availableUpdate.value == null
                         ? 'Check for updates'
-                        : 'Download Syncy ${updates.availableUpdate.value!.version}',
+                        : 'Update Syncy ${updates.availableUpdate.value!.version}',
                   ),
                   subtitle: Text(
                     updates.statusMessage.value.isEmpty
@@ -88,7 +89,7 @@ class SettingsScreen extends GetView<SettingsController> {
                       : () async {
                           final available = updates.availableUpdate.value;
                           if (available != null) {
-                            await updates.openDownload(available);
+                            await runUpdateFlow(available);
                             return;
                           }
                           final update = await updates.check(force: true);

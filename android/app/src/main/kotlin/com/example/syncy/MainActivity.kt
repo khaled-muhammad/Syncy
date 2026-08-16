@@ -1,12 +1,17 @@
 package com.example.syncy
 
+import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
+import android.provider.Settings
+import androidx.core.content.FileProvider
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.plugin.common.MethodChannel
+import java.io.File
 import java.util.Locale
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -14,6 +19,7 @@ import java.util.concurrent.Executors
 class MainActivity : FlutterActivity() {
     private val mediaExecutor: ExecutorService = Executors.newSingleThreadExecutor()
     private val mainHandler = Handler(Looper.getMainLooper())
+    private var pendingUpdateApk: String? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -43,6 +49,78 @@ class MainActivity : FlutterActivity() {
                 }
             }
         }
+
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "com.example.syncy/update",
+        ).setMethodCallHandler { call, result ->
+            if (call.method != "installApk") {
+                result.notImplemented()
+                return@setMethodCallHandler
+            }
+            val path = call.argument<String>("path")
+            if (path.isNullOrBlank()) {
+                result.error("INVALID_APK", "The update path is missing.", null)
+                return@setMethodCallHandler
+            }
+            val apk = File(path)
+            if (!apk.isFile || apk.extension.lowercase(Locale.ROOT) != "apk") {
+                result.error("INVALID_APK", "The verified update is missing.", null)
+                return@setMethodCallHandler
+            }
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+                !packageManager.canRequestPackageInstalls()
+            ) {
+                pendingUpdateApk = apk.absolutePath
+                runCatching {
+                    startActivity(
+                        Intent(
+                            Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                            Uri.parse("package:$packageName"),
+                        ),
+                    )
+                }.onSuccess {
+                    result.success("permission_requested")
+                }.onFailure { error ->
+                    pendingUpdateApk = null
+                    result.error("PERMISSION_SCREEN_FAILED", error.message, null)
+                }
+                return@setMethodCallHandler
+            }
+
+            runCatching { launchPackageInstaller(apk) }
+                .onSuccess { result.success("launched") }
+                .onFailure { error ->
+                    result.error("INSTALLER_FAILED", error.message, null)
+                }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        val path = pendingUpdateApk ?: return
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O ||
+            packageManager.canRequestPackageInstalls()
+        ) {
+            pendingUpdateApk = null
+            val apk = File(path)
+            if (apk.isFile) runCatching { launchPackageInstaller(apk) }
+        }
+    }
+
+    private fun launchPackageInstaller(apk: File) {
+        val uri = FileProvider.getUriForFile(
+            this,
+            "$packageName.update-files",
+            apk,
+        )
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, "application/vnd.android.package-archive")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        startActivity(intent)
     }
 
     private fun queryVideoPaths(supportedExtensions: Set<String>): List<String> {

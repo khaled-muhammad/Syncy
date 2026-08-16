@@ -10,6 +10,8 @@ import 'package:syncy/models/remote_media.dart';
 import 'package:syncy/models/room.dart';
 import 'package:syncy/models/room_preset.dart';
 import 'package:syncy/models/user.dart';
+import 'package:syncy/screens/lan/direct_pc_player_screen.dart';
+import 'package:syncy/services/lan/lan_client_service.dart';
 import 'package:syncy/services/lan/lan_host_service.dart';
 import 'package:syncy/utils/platform_utils.dart';
 import 'package:syncy/widgets/modern_input.dart';
@@ -36,6 +38,33 @@ class _CreateRoomBottomSheetState extends State<CreateRoomBottomSheet> {
   late User user;
   RoomMode _roomMode = RoomMode.friends;
   bool _creating = false;
+  bool _watchingDirectly = false;
+
+  Future<void> _watchDirectly() async {
+    final media = widget.remoteMedia;
+    if (media == null) return;
+    setState(() => _watchingDirectly = true);
+    try {
+      final url = await Get.find<LanController>().streamUrlForRemote(media);
+      if (!mounted) return;
+      Get.back();
+      Get.to(() => DirectPcPlayerScreen(streamUrl: url, title: media.name));
+    } on LanUnauthorized {
+      if (!mounted) return;
+      setState(() => _watchingDirectly = false);
+      Get.snackbar(
+        'Pair again',
+        'This PC no longer trusts this phone. Pair it again to keep watching.',
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _watchingDirectly = false);
+      Get.snackbar(
+        'Could not start playback',
+        "Keep the PC awake and check that you're on the same Wi-Fi network.",
+      );
+    }
+  }
 
   Future<void> _create() async {
     final roomName = _roomNameController.text.trim();
@@ -108,6 +137,13 @@ class _CreateRoomBottomSheetState extends State<CreateRoomBottomSheet> {
   }
 
   @override
+  void dispose() {
+    _nameController.dispose();
+    _roomNameController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return ClipRRect(
       child: BackdropFilter(
@@ -125,109 +161,181 @@ class _CreateRoomBottomSheetState extends State<CreateRoomBottomSheet> {
                     topRight: Radius.circular(26),
                   ),
           ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text("Create Room", style: Get.textTheme.headlineSmall),
-                const SizedBox(height: 20),
-                ModernInput(
-                  controller: _nameController,
-                  icon: Icons.person_2_rounded,
-                  hintText: "Enter your name",
-                  onChanged: (newUserName) {
-                    user.name = newUserName;
-                    isar.writeTxnSync(() {
-                      isar.users.putSync(user);
-                    });
-                  },
+          child: SafeArea(
+            top: false,
+            child: SingleChildScrollView(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  vertical: 12,
+                  horizontal: 6,
                 ),
-                const SizedBox(height: 20),
-                ModernInput(
-                  controller: _roomNameController,
-                  icon: Icons.door_front_door_rounded,
-                  hintText: "Enter room name here",
-                  onChanged: (newRoomName) {
-                    setState(() {});
-                  },
-                ),
-                const SizedBox(height: 20),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: Text(
-                      'Choose a room vibe',
-                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w800,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      widget.remoteMedia == null
+                          ? 'Create Room'
+                          : 'How to watch',
+                      style: Get.textTheme.headlineSmall,
+                    ),
+                    if (widget.remoteMedia != null) ...[
+                      const SizedBox(height: 8),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        child: Text(
+                          widget.remoteMedia!.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(color: Colors.white60),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.icon(
+                          onPressed: _creating || _watchingDirectly
+                              ? null
+                              : _watchDirectly,
+                          icon: _watchingDirectly
+                              ? const SizedBox.square(
+                                  dimension: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.play_arrow_rounded),
+                          label: const Text('Watch now on this phone'),
+                        ),
+                      ),
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 16),
+                        child: Row(
+                          children: [
+                            Expanded(child: Divider()),
+                            Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 12),
+                              child: Text(
+                                'OR CREATE A ROOM',
+                                style: TextStyle(
+                                  color: Colors.white38,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 1,
+                                ),
+                              ),
+                            ),
+                            Expanded(child: Divider()),
+                          ],
+                        ),
+                      ),
+                    ] else
+                      const SizedBox(height: 20),
+                    ModernInput(
+                      controller: _nameController,
+                      icon: Icons.person_2_rounded,
+                      hintText: "Enter your name",
+                      onChanged: (newUserName) {
+                        user.name = newUserName;
+                        isar.writeTxnSync(() {
+                          isar.users.putSync(user);
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 20),
+                    ModernInput(
+                      controller: _roomNameController,
+                      icon: Icons.door_front_door_rounded,
+                      hintText: "Enter room name here",
+                      onChanged: (newRoomName) {
+                        setState(() {});
+                      },
+                    ),
+                    const SizedBox(height: 20),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        child: Text(
+                          'Choose a room vibe',
+                          style: Theme.of(context).textTheme.titleSmall
+                              ?.copyWith(fontWeight: FontWeight.w800),
+                        ),
                       ),
                     ),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                SizedBox(
-                  height: 142,
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    itemCount: roomPresets.length,
-                    separatorBuilder: (_, _) => const SizedBox(width: 10),
-                    itemBuilder: (context, index) {
-                      final preset = roomPresets[index];
-                      return _RoomPresetCard(
-                        preset: preset,
-                        selected: preset.mode == _roomMode,
-                        onTap: () => setState(() => _roomMode = preset.mode),
-                      );
-                    },
-                  ),
-                ),
-                const SizedBox(height: 20),
-                ElevatedButton.icon(
-                  onPressed:
-                      _roomNameController.text.trim().isEmpty || _creating
-                      ? null
-                      : _create,
-                  icon: const Icon(Icons.start_rounded, color: Colors.white),
-                  label: const Text(
-                    "Create",
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                      letterSpacing: 1.0,
-                    ),
-                  ),
-                  style:
-                      ElevatedButton.styleFrom(
-                        disabledBackgroundColor: Colors.white12,
-                        disabledForegroundColor: Colors.white38,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 28,
-                          vertical: 14,
-                        ),
-                        backgroundColor: Colors.purpleAccent.withValues(
-                          alpha: 0.3,
-                        ),
-                        shadowColor: Colors.purpleAccent.withValues(alpha: 0.5),
-                        elevation: 12,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(30),
-                        ),
-                      ).copyWith(
-                        overlayColor: WidgetStateProperty.resolveWith<Color?>((
-                          states,
-                        ) {
-                          if (states.contains(WidgetState.pressed)) {
-                            return Colors.deepPurpleAccent.withValues(
-                              alpha: 0.2,
-                            );
-                          }
-                          return null;
-                        }),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      height: 142,
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        itemCount: roomPresets.length,
+                        separatorBuilder: (_, _) => const SizedBox(width: 10),
+                        itemBuilder: (context, index) {
+                          final preset = roomPresets[index];
+                          return _RoomPresetCard(
+                            preset: preset,
+                            selected: preset.mode == _roomMode,
+                            onTap: () =>
+                                setState(() => _roomMode = preset.mode),
+                          );
+                        },
                       ),
+                    ),
+                    const SizedBox(height: 20),
+                    ElevatedButton.icon(
+                      onPressed:
+                          _roomNameController.text.trim().isEmpty ||
+                              _creating ||
+                              _watchingDirectly
+                          ? null
+                          : _create,
+                      icon: const Icon(
+                        Icons.start_rounded,
+                        color: Colors.white,
+                      ),
+                      label: const Text(
+                        "Create",
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                          letterSpacing: 1.0,
+                        ),
+                      ),
+                      style:
+                          ElevatedButton.styleFrom(
+                            disabledBackgroundColor: Colors.white12,
+                            disabledForegroundColor: Colors.white38,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 28,
+                              vertical: 14,
+                            ),
+                            backgroundColor: Colors.purpleAccent.withValues(
+                              alpha: 0.3,
+                            ),
+                            shadowColor: Colors.purpleAccent.withValues(
+                              alpha: 0.5,
+                            ),
+                            elevation: 12,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(30),
+                            ),
+                          ).copyWith(
+                            overlayColor:
+                                WidgetStateProperty.resolveWith<Color?>((
+                                  states,
+                                ) {
+                                  if (states.contains(WidgetState.pressed)) {
+                                    return Colors.deepPurpleAccent.withValues(
+                                      alpha: 0.2,
+                                    );
+                                  }
+                                  return null;
+                                }),
+                          ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
         ),
